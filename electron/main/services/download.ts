@@ -448,6 +448,14 @@ async function executeDownload(
         ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
         : undefined;
 
+    // GameBanana lets mod authors label each file (e.g. "Gold w/ alt candle").
+    // Persist that header so the variant picker can show meaningful names by
+    // default — much friendlier than raw VPK filenames. Trim because the
+    // upstream field occasionally has surrounding whitespace.
+    const fileDescription = details.files
+        ?.find((f) => f.id === fileId)
+        ?.description?.trim();
+
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
         gameBananaId: modId,
@@ -458,6 +466,7 @@ async function executeDownload(
         audioUrl: details.previewMedia?.metadata?.audioUrl,  // Persist for Sound mod preview
         sourceSection: section,
         nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
+        fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
     };
 
     let installedVpks: string[] = [];
@@ -864,6 +873,12 @@ async function executeOneClickDownload(
         : undefined;
 
     const realModId = args.modId !== undefined && args.modId > 0 ? args.modId : undefined;
+    // Same trick as the regular download path: capture the author's per-file
+    // header so the variant picker has a sane default label. Only available
+    // when GB enrichment succeeded and the file id is recognised in the list.
+    const oneClickFileDescription = enriched?.files
+        ?.find((f) => f.id === fileId)
+        ?.description?.trim();
     const metadata = {
         modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
         gameBananaId: realModId,
@@ -873,6 +888,10 @@ async function executeOneClickDownload(
         audioUrl: enriched?.previewMedia?.metadata?.audioUrl,
         sourceSection: section,
         nsfw: enriched?.nsfw,
+        fileDescription:
+            oneClickFileDescription && oneClickFileDescription.length > 0
+                ? oneClickFileDescription
+                : undefined,
     };
 
     let installedVpks: string[] = [];

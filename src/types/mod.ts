@@ -17,6 +17,7 @@ export interface Mod {
   sourceSection?: string;
   nsfw?: boolean;
   variantLabel?: string;
+  fileDescription?: string;
 }
 
 export interface Profile {

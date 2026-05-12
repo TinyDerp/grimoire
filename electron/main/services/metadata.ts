@@ -13,6 +13,7 @@ export interface ModMetadata {
     nsfw?: boolean;
     isMinaPreset?: boolean; // Flag for Mina presets we extracted from the 7z
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
+    fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;

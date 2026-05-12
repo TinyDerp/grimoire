@@ -177,10 +177,16 @@ export default function VariantPickerModal({
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
                         const isRenamePending = pending === `rename:${v.id}`;
-                        // Title text shown on the row: label takes priority, fall
-                        // back to filename so the row is never blank.
-                        const primaryTitle = v.variantLabel ?? v.fileName;
-                        const showSecondaryFileName = !!v.variantLabel;
+                        // Title precedence: user rename wins, else the
+                        // GameBanana file header the author set (e.g. "Gold
+                        // w/ alt candle"), else the raw VPK filename. Show
+                        // the filename as a secondary line whenever we used
+                        // a friendlier label up top so the underlying file
+                        // is still discoverable.
+                        const primaryTitle =
+                            v.variantLabel ?? v.fileDescription ?? v.fileName;
+                        const showSecondaryFileName =
+                            !!v.variantLabel || !!v.fileDescription;
                         return (
                             <div
                                 key={v.id}
@@ -231,7 +237,7 @@ export default function VariantPickerModal({
                                             ) : (
                                                 <div className="flex items-center gap-2 min-w-0">
                                                     <span
-                                                        className={`truncate ${v.variantLabel ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
+                                                        className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
                                                         title={primaryTitle}
                                                     >
                                                         {primaryTitle}

@@ -26,6 +26,11 @@ interface ModDetailsModalProps {
   section: string;
   installed: boolean;
   installedFileIds: Set<number>;
+  /** GameBanana file id of the currently-enabled variant, when any. The file
+   *  row with this id gets an "Active" badge so the user can see which of
+   *  several installed variants is the one actually loaded. Browse uses null
+   *  (it has no notion of which variant is active across the whole library). */
+  activeFileId?: number | null;
   downloadingFileId: number | null;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
@@ -42,6 +47,7 @@ export default function ModDetailsModal({
   section,
   installed,
   installedFileIds,
+  activeFileId = null,
   downloadingFileId,
   extracting,
   progress,
@@ -344,6 +350,7 @@ export default function ModDetailsModal({
                   {mod.files.map((file) => {
                     const isInstalled = installedFileIds.has(file.id);
                     const isUpdate = updateAvailable && isInstalled;
+                    const isActive = activeFileId !== null && activeFileId === file.id;
                     const isDownloadingThis = downloadingFileId === file.id;
                     const pct = progress && progress.total > 0
                       ? Math.round((progress.downloaded / progress.total) * 100)
@@ -354,22 +361,38 @@ export default function ModDetailsModal({
                         className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                           isUpdate
                             ? 'border-accent/40 bg-accent/5'
-                            : isInstalled
-                              ? 'border-green-500/30 bg-green-500/5'
-                              : 'border-border bg-bg-tertiary'
+                            : isActive
+                              ? 'border-accent/50 bg-accent/10'
+                              : isInstalled
+                                ? 'border-green-500/30 bg-green-500/5'
+                                : 'border-border bg-bg-tertiary'
                         }`}
                       >
                         <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
                           isUpdate
                             ? 'bg-accent/15 text-accent'
-                            : isInstalled
-                              ? 'bg-green-500/15 text-green-400'
-                              : 'bg-bg-secondary text-text-secondary'
+                            : isActive
+                              ? 'bg-accent/20 text-accent'
+                              : isInstalled
+                                ? 'bg-green-500/15 text-green-400'
+                                : 'bg-bg-secondary text-text-secondary'
                         }`}>
                           <FileArchive className="w-5 h-5" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
+                            {isActive && (
+                              <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          {file.description && (
+                            <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
+                              {file.description}
+                            </p>
+                          )}
                           <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
                             <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
                             <span className="opacity-50">•</span>

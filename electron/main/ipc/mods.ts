@@ -46,6 +46,7 @@ function enrichMod(mod: Mod): Mod {
             sourceSection: metadata.sourceSection,
             nsfw: metadata.nsfw,
             variantLabel: metadata.variantLabel,
+            fileDescription: metadata.fileDescription,
         };
     }
     return mod;

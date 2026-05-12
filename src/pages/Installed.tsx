@@ -181,6 +181,10 @@ export default function Installed() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
+  // GameBanana fileId of the currently-enabled variant in the group (when any).
+  // Drives the "Active" badge in the details modal so users can see which file
+  // is the one actually loaded in-game, not just which ones are installed.
+  const [detailsActiveFileId, setDetailsActiveFileId] = useState<number | null>(null);
   const [detailsDates, setDetailsDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   // Local id of the installed mod that triggered the overlay. On download we
   // delete this entry first so Update/Reinstall replaces the old VPK instead
@@ -199,7 +203,22 @@ export default function Installed() {
     setDetailsSection(section);
     setDetailsCategoryId(categoryId);
     setDetailsSourceModId(m.id);
-    setDetailsInstalledFileIds(m.gameBananaFileId ? new Set([m.gameBananaFileId]) : new Set());
+    // Build the installed-file set from every sibling sharing this GB id,
+    // not just the clicked variant. Otherwise the modal flags only one row
+    // as "Reinstall" when multiple variants of the same mod are present —
+    // diverging from Browse, which already aggregates correctly.
+    const siblingFileIds = new Set<number>();
+    let activeFileId: number | null = null;
+    for (const candidate of mods) {
+      if (candidate.gameBananaId !== m.gameBananaId) continue;
+      if (typeof candidate.gameBananaFileId !== 'number') continue;
+      siblingFileIds.add(candidate.gameBananaFileId);
+      if (candidate.enabled && activeFileId === null) {
+        activeFileId = candidate.gameBananaFileId;
+      }
+    }
+    setDetailsInstalledFileIds(siblingFileIds);
+    setDetailsActiveFileId(activeFileId);
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
     setDetailsDates(null);
     try {
@@ -223,6 +242,7 @@ export default function Installed() {
     setDetailsError(null);
     setDetailsUpdateAvailable(false);
     setDetailsSourceModId(null);
+    setDetailsActiveFileId(null);
     setDetailsDates(null);
   };
 
@@ -652,11 +672,12 @@ export default function Installed() {
         onDragEnd={resetDragState}
         group={{
           variantCount: entry.variants.length,
-          // Display the active variant's user-given label when set; falls
-          // back to the VPK filename. Lets the user see "Red preset" on
-          // the card instead of "pak06_dir.vpk".
+          // Display the active variant's user-given label when set, else
+          // the author's GameBanana file header, else the raw VPK filename.
+          // Lets the user see "Red preset" / "Gold w/ alt candle" on the
+          // card instead of "pak06_dir.vpk".
           activeFileName: entry.active
-            ? (entry.active.variantLabel ?? entry.active.fileName)
+            ? (entry.active.variantLabel ?? entry.active.fileDescription ?? entry.active.fileName)
             : null,
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
@@ -929,6 +950,7 @@ export default function Installed() {
           section={detailsSection}
           installed={true}
           installedFileIds={detailsInstalledFileIds}
+          activeFileId={detailsActiveFileId}
           downloadingFileId={null}
           extracting={false}
           progress={null}
