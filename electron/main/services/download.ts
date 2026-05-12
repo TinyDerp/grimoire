@@ -29,6 +29,15 @@ export interface OneClickInstallArgs {
     enrichedDetails?: GameBananaModDetails;
 }
 
+/**
+ * Strip the trailing archive extension from a GameBanana filename so we keep
+ * a clean stem to use as a label fallback. Case-insensitive; leaves the rest
+ * of the name untouched (underscores etc. survive — the picker can prettify).
+ */
+function stripArchiveExtension(name: string): string {
+    return name.replace(/\.(zip|7z|rar|vpk)$/i, '').trim();
+}
+
 // Download queue to prevent race conditions with VPK priority assignment
 interface QueuedDownload {
     deadlockPath: string;
@@ -455,6 +464,11 @@ async function executeDownload(
     const fileDescription = details.files
         ?.find((f) => f.id === fileId)
         ?.description?.trim();
+    // Many mod authors leave file descriptions blank, so also capture the
+    // GB filename stem (e.g. "galaxy_rem_gold.zip" → "galaxy_rem_gold").
+    // This becomes the picker's second-line fallback so variants get a
+    // meaningful label even when the description is empty.
+    const sourceFileNameStem = stripArchiveExtension(fileName);
 
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
@@ -467,6 +481,7 @@ async function executeDownload(
         sourceSection: section,
         nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
         fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
+        sourceFileName: sourceFileNameStem.length > 0 ? sourceFileNameStem : undefined,
     };
 
     let installedVpks: string[] = [];
@@ -879,6 +894,7 @@ async function executeOneClickDownload(
     const oneClickFileDescription = enriched?.files
         ?.find((f) => f.id === fileId)
         ?.description?.trim();
+    const oneClickSourceFileName = stripArchiveExtension(fileName);
     const metadata = {
         modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
         gameBananaId: realModId,
@@ -892,6 +908,7 @@ async function executeOneClickDownload(
             oneClickFileDescription && oneClickFileDescription.length > 0
                 ? oneClickFileDescription
                 : undefined,
+        sourceFileName: oneClickSourceFileName.length > 0 ? oneClickSourceFileName : undefined,
     };
 
     let installedVpks: string[] = [];

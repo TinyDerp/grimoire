@@ -179,14 +179,20 @@ export default function VariantPickerModal({
                         const isRenamePending = pending === `rename:${v.id}`;
                         // Title precedence: user rename wins, else the
                         // GameBanana file header the author set (e.g. "Gold
-                        // w/ alt candle"), else the raw VPK filename. Show
-                        // the filename as a secondary line whenever we used
-                        // a friendlier label up top so the underlying file
-                        // is still discoverable.
+                        // w/ alt candle"), else the original GB filename
+                        // stem (covers mods whose author left descriptions
+                        // empty — far more useful than pak04_dir.vpk), else
+                        // the local VPK filename. Show the local filename as
+                        // a secondary line whenever we used a friendlier
+                        // label up top so the underlying file is still
+                        // discoverable.
                         const primaryTitle =
-                            v.variantLabel ?? v.fileDescription ?? v.fileName;
+                            v.variantLabel ??
+                            v.fileDescription ??
+                            v.sourceFileName ??
+                            v.fileName;
                         const showSecondaryFileName =
-                            !!v.variantLabel || !!v.fileDescription;
+                            !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
                         return (
                             <div
                                 key={v.id}

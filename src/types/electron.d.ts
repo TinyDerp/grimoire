@@ -331,6 +331,9 @@ export interface ElectronAPI {
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
+    getIgnoredConflicts: () => Promise<string[]>;
+    ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
+    unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;

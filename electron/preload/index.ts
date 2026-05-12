@@ -90,6 +90,9 @@ export interface ElectronAPI {
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
+    getIgnoredConflicts: () => Promise<string[]>;
+    ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
+    unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
@@ -788,6 +791,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Conflicts
     getConflicts: () => ipcRenderer.invoke('get-conflicts'),
+    getIgnoredConflicts: () => ipcRenderer.invoke('get-ignored-conflicts'),
+    ignoreConflict: (modA: string, modB: string) =>
+        ipcRenderer.invoke('ignore-conflict', modA, modB),
+    unignoreConflict: (modA: string, modB: string) =>
+        ipcRenderer.invoke('unignore-conflict', modA, modB),
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),

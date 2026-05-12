@@ -18,6 +18,7 @@ import {
   List,
   LayoutGrid,
   Grid3x3,
+  Layers,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -673,11 +674,16 @@ export default function Installed() {
         group={{
           variantCount: entry.variants.length,
           // Display the active variant's user-given label when set, else
-          // the author's GameBanana file header, else the raw VPK filename.
+          // the author's GameBanana file header, else the original GB
+          // filename stem (covers mods whose author left descriptions
+          // blank — e.g. "galaxy_rem_gold"), else the raw VPK filename.
           // Lets the user see "Red preset" / "Gold w/ alt candle" on the
           // card instead of "pak06_dir.vpk".
           activeFileName: entry.active
-            ? (entry.active.variantLabel ?? entry.active.fileDescription ?? entry.active.fileName)
+            ? (entry.active.variantLabel ??
+               entry.active.fileDescription ??
+               entry.active.sourceFileName ??
+               entry.active.fileName)
             : null,
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
@@ -1200,6 +1206,26 @@ function ModCard({
                 </Tag>
               )}
             </div>
+            {/* Active-variant badge anchored at the bottom so it doesn't fight
+                the top-right Conflict/Update stack or visually clash with the
+                accent-colored Enable toggle in the card body. A short gradient
+                behind it keeps the label legible against busy thumbnail art. */}
+            {group?.activeFileName && (
+              <>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/75 via-black/40 to-transparent z-[5]" />
+                <div className="absolute bottom-2 left-2 right-2 z-10 flex">
+                  <Tag
+                    tone="info"
+                    variant="overlay"
+                    icon={Layers}
+                    title={`Active variant: ${group.activeFileName} — click card to switch`}
+                    className="max-w-full"
+                  >
+                    <span className="truncate">{group.activeFileName}</span>
+                  </Tag>
+                </div>
+              </>
+            )}
           </>
         );
 

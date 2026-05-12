@@ -15,6 +15,11 @@ export interface AppSettings {
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     hasCompletedSetup: boolean;      // First-run setup completed
+    /** Mod pairs the user has dismissed in the Conflicts page. Each entry is
+     *  the two mod ids joined sorted with `::` (e.g. "abc123::def456") so the
+     *  order of detection doesn't affect matching. Detector strips these out
+     *  before returning so the warning stops appearing for that pair. */
+    ignoredConflicts: string[];
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -30,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalStats: false,
     experimentalCrosshair: false,
     hasCompletedSetup: false,
+    ignoredConflicts: [],
 };
 
 /**

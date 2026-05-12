@@ -1017,6 +1017,23 @@ export default function Browse() {
     return ids;
   }, [installedMods]);
 
+  // Per-file install map for the details modal. Lets a row that's installed
+  // but currently disabled surface an inline "Enable" pill — matches the
+  // affordance already on the tile card. If multiple local mods share a
+  // file id (rare, e.g. dupe installs), prefer the enabled one as the
+  // representative since that's the actionable state.
+  const installedFileStates = useMemo(() => {
+    const map = new Map<number, { modId: string; enabled: boolean }>();
+    for (const mod of installedMods) {
+      if (typeof mod.gameBananaFileId !== 'number') continue;
+      const existing = map.get(mod.gameBananaFileId);
+      if (!existing || (mod.enabled && !existing.enabled)) {
+        map.set(mod.gameBananaFileId, { modId: mod.id, enabled: mod.enabled });
+      }
+    }
+    return map;
+  }, [installedMods]);
+
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
   const displayMods = settings?.hideOutdatedMods
@@ -1403,6 +1420,8 @@ export default function Browse() {
           section={section}
           installed={installedIds.has(selectedMod.id)}
           installedFileIds={installedFileIds}
+          installedFileStates={installedFileStates}
+          onEnableFile={(modId) => toggleMod(modId)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}

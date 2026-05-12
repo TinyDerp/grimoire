@@ -18,6 +18,7 @@ export interface Mod {
   nsfw?: boolean;
   variantLabel?: string;
   fileDescription?: string;
+  sourceFileName?: string;
 }
 
 export interface Profile {
@@ -51,4 +52,5 @@ export interface AppSettings {
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
   hasCompletedSetup: boolean;
+  ignoredConflicts: string[];
 }
