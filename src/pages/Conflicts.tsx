@@ -19,6 +19,21 @@ interface ModWithThumbnail {
   name: string;
   fileName: string;
   thumbnailUrl?: string;
+  gameBananaId?: number;
+  hasSiblingVariants?: boolean;
+  variantLabel?: string;
+  fileDescription?: string;
+  sourceFileName?: string;
+}
+
+function getVariantLabel(mod: ModWithThumbnail): string | null {
+  if (!mod.hasSiblingVariants) return null;
+  return (
+    mod.variantLabel?.trim() ||
+    mod.fileDescription?.trim() ||
+    mod.sourceFileName?.trim() ||
+    null
+  );
 }
 
 function ConflictsSkeleton() {
@@ -80,12 +95,27 @@ export default function Conflicts() {
       ]);
 
       const map = new Map<string, ModWithThumbnail>();
+      const gameBananaCounts = new Map<number, number>();
       for (const mod of modsResult as Mod[]) {
+        if (typeof mod.gameBananaId !== 'number' || mod.gameBananaId <= 0) continue;
+        gameBananaCounts.set(mod.gameBananaId, (gameBananaCounts.get(mod.gameBananaId) ?? 0) + 1);
+      }
+
+      for (const mod of modsResult as Mod[]) {
+        const hasSiblingVariants =
+          typeof mod.gameBananaId === 'number' &&
+          mod.gameBananaId > 0 &&
+          (gameBananaCounts.get(mod.gameBananaId) ?? 0) > 1;
         map.set(mod.id, {
           id: mod.id,
           name: mod.name,
           fileName: mod.fileName,
           thumbnailUrl: mod.thumbnailUrl,
+          gameBananaId: mod.gameBananaId,
+          hasSiblingVariants,
+          variantLabel: mod.variantLabel,
+          fileDescription: mod.fileDescription,
+          sourceFileName: mod.sourceFileName,
         });
       }
       setModsMap(map);
@@ -222,6 +252,8 @@ export default function Conflicts() {
         {conflicts.map((conflict, i) => {
           const modA = getModInfo(conflict.modA, conflict.modAName);
           const modB = getModInfo(conflict.modB, conflict.modBName);
+          const variantA = getVariantLabel(modA);
+          const variantB = getVariantLabel(modB);
 
           return (
             <div
@@ -275,6 +307,11 @@ export default function Conflicts() {
                   <p className="text-sm font-medium text-text-primary text-center truncate">
                     {modA.name}
                   </p>
+                  {variantA && (
+                    <p className="text-xs text-accent text-center truncate" title={variantA}>
+                      {variantA}
+                    </p>
+                  )}
                   {modA.fileName && (
                     <p className="text-xs text-text-tertiary text-center truncate" title={modA.fileName}>
                       {modA.fileName}
@@ -314,6 +351,11 @@ export default function Conflicts() {
                   <p className="text-sm font-medium text-text-primary text-center truncate">
                     {modB.name}
                   </p>
+                  {variantB && (
+                    <p className="text-xs text-accent text-center truncate" title={variantB}>
+                      {variantB}
+                    </p>
+                  )}
                   {modB.fileName && (
                     <p className="text-xs text-text-tertiary text-center truncate" title={modB.fileName}>
                       {modB.fileName}
@@ -347,12 +389,18 @@ export default function Conflicts() {
               // never re-appear as active conflicts.
               const aName = a?.name ?? '(removed mod)';
               const bName = b?.name ?? '(removed mod)';
+              const aVariant = a ? getVariantLabel(a) : null;
+              const bVariant = b ? getVariantLabel(b) : null;
               return (
                 <div key={key} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
-                    <span className="truncate text-text-primary" title={aName}>{aName}</span>
+                    <span className="truncate text-text-primary" title={aVariant ? `${aName} - ${aVariant}` : aName}>
+                      {aName}{aVariant ? ` (${aVariant})` : ''}
+                    </span>
                     <span className="text-text-tertiary text-xs flex-shrink-0">vs</span>
-                    <span className="truncate text-text-primary" title={bName}>{bName}</span>
+                    <span className="truncate text-text-primary" title={bVariant ? `${bName} - ${bVariant}` : bName}>
+                      {bName}{bVariant ? ` (${bVariant})` : ''}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -382,6 +430,11 @@ export default function Conflicts() {
               <p className="mb-2">
                 <span className="text-text-primary font-medium">{disableTarget.name}</span> will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.
               </p>
+              {getVariantLabel(disableTarget) && (
+                <p className="text-xs text-accent truncate" title={getVariantLabel(disableTarget) ?? undefined}>
+                  {getVariantLabel(disableTarget)}
+                </p>
+              )}
               {disableTarget.fileName && (
                 <p className="text-xs font-mono text-text-tertiary truncate" title={disableTarget.fileName}>{disableTarget.fileName}</p>
               )}

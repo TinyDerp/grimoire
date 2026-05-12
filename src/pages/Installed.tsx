@@ -46,10 +46,10 @@ function formatBytes(bytes: number): string {
 type DropPosition = 'before' | 'after';
 
 /**
- * Rows on the Installed page are either standalone mods or groups of variants
+ * Rows on the Installed page are either standalone mods or grouped files
  * sharing the same GameBanana mod (e.g. five preset VPKs from one skin pack).
- * Grouped entries collapse to a single card with a "N variants" badge; the
- * picker modal handles per-variant select/delete.
+ * Grouped entries collapse to a single card; the picker modal handles
+ * per-file enable, rename, and delete actions.
  */
 type ModEntry =
   | { kind: 'single'; mod: Mod; key: string }
@@ -57,11 +57,10 @@ type ModEntry =
       kind: 'group';
       gameBananaId: number;
       variants: Mod[];
-      /** Currently-enabled variant in the group. Null when the whole group
-       *  is disabled. Mutual exclusion: only one variant is active at a time. */
-      active: Mod | null;
-      /** Mod we render visuals from (thumbnail, name, category). The active
-       *  variant when one's enabled, else the first variant by filename. */
+      /** Enabled files in this group. Empty when the whole group is disabled. */
+      enabledVariants: Mod[];
+      /** Mod we render visuals from (thumbnail, name, category). The first
+       *  enabled file when any are enabled, else the first variant by priority. */
       primary: Mod;
       /** Sum of variant sizes — shown as the card's "size" field. */
       totalSize: number;
@@ -98,14 +97,14 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     // user's mental model ("which slot is this in?") and the picker shows
     // them in the same order as the addons folder.
     variants.sort((a, b) => a.priority - b.priority);
-    const active = variants.find((v) => v.enabled) ?? null;
-    const primary = active ?? variants[0];
+    const enabledVariants = variants.filter((v) => v.enabled);
+    const primary = enabledVariants[0] ?? variants[0];
     const totalSize = variants.reduce((sum, v) => sum + v.size, 0);
     entries.push({
       kind: 'group',
       gameBananaId,
       variants,
-      active,
+      enabledVariants,
       primary,
       totalSize,
       key: `group:${gameBananaId}`,
@@ -114,9 +113,9 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
   return entries;
 }
 
-/** A group is considered "enabled" when it has a currently-active variant. */
+/** A group is considered "enabled" when at least one file is enabled. */
 function isEntryEnabled(entry: ModEntry): boolean {
-  return entry.kind === 'single' ? entry.mod.enabled : entry.active !== null;
+  return entry.kind === 'single' ? entry.mod.enabled : entry.enabledVariants.length > 0;
 }
 
 /** Sort key for ordering enabled/disabled sections. Uses the primary's
@@ -129,6 +128,34 @@ function entrySortPriority(entry: ModEntry): number {
 /** Searchable display name for an entry (the visible card title). */
 function entryName(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.name : entry.primary.name;
+}
+
+function flattenEntries(entries: ModEntry[]): Mod[] {
+  return entries.flatMap((entry) => (entry.kind === 'single' ? [entry.mod] : entry.variants));
+}
+
+function entryFilesByEnabledState(entry: ModEntry, enabled: boolean): Mod[] {
+  if (entry.kind === 'single') {
+    return entry.mod.enabled === enabled ? [entry.mod] : [];
+  }
+  return entry.variants.filter((variant) => variant.enabled === enabled);
+}
+
+function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
+  const compactState = (enabled: boolean) =>
+    entries
+      .map((entry) => {
+        const files = entryFilesByEnabledState(entry, enabled);
+        const priority = files.length > 0
+          ? Math.min(...files.map((file) => file.priority))
+          : Number.POSITIVE_INFINITY;
+        return { files, priority };
+      })
+      .filter(({ files }) => files.length > 0)
+      .sort((a, b) => a.priority - b.priority)
+      .flatMap(({ files }) => files);
+
+  return [...compactState(true), ...compactState(false)];
 }
 
 export default function Installed() {
@@ -158,10 +185,10 @@ export default function Installed() {
   const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Delete confirmation. `ids` is a list so the same prompt can drive both
-  // single-mod and "all variants in this group" deletions.
+  // single-mod and "all files in this group" deletions.
   const [modToDelete, setModToDelete] = useState<{ ids: string[]; name: string; isGroup: boolean } | null>(null);
   // GB id of the group whose picker is open, or null. The actual entry is
-  // derived from live `mods` each render so per-variant deletes inside the
+  // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
   const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -182,10 +209,9 @@ export default function Installed() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
-  // GameBanana fileId of the currently-enabled variant in the group (when any).
-  // Drives the "Active" badge in the details modal so users can see which file
-  // is the one actually loaded in-game, not just which ones are installed.
-  const [detailsActiveFileId, setDetailsActiveFileId] = useState<number | null>(null);
+  // GameBanana fileIds of enabled files in the group. Drives the "Active"
+  // badges in the details modal when multiple files are enabled together.
+  const [detailsActiveFileIds, setDetailsActiveFileIds] = useState<Set<number>>(new Set());
   const [detailsDates, setDetailsDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   // Local id of the installed mod that triggered the overlay. On download we
   // delete this entry first so Update/Reinstall replaces the old VPK instead
@@ -212,21 +238,21 @@ export default function Installed() {
     setDetailsCategoryId(categoryId);
     setDetailsSourceModId(m.id);
     // Build the installed-file set from every sibling sharing this GB id,
-    // not just the clicked variant. Otherwise the modal flags only one row
-    // as "Reinstall" when multiple variants of the same mod are present —
+    // not just the clicked file. Otherwise the modal flags only one row
+    // as "Reinstall" when multiple files of the same mod are present -
     // diverging from Browse, which already aggregates correctly.
     const siblingFileIds = new Set<number>();
-    let activeFileId: number | null = null;
+    const activeFileIds = new Set<number>();
     for (const candidate of mods) {
       if (candidate.gameBananaId !== m.gameBananaId) continue;
       if (typeof candidate.gameBananaFileId !== 'number') continue;
       siblingFileIds.add(candidate.gameBananaFileId);
-      if (candidate.enabled && activeFileId === null) {
-        activeFileId = candidate.gameBananaFileId;
+      if (candidate.enabled) {
+        activeFileIds.add(candidate.gameBananaFileId);
       }
     }
     setDetailsInstalledFileIds(siblingFileIds);
-    setDetailsActiveFileId(activeFileId);
+    setDetailsActiveFileIds(activeFileIds);
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
     setDetailsDates(null);
     try {
@@ -250,7 +276,7 @@ export default function Installed() {
     setDetailsError(null);
     setDetailsUpdateAvailable(false);
     setDetailsSourceModId(null);
-    setDetailsActiveFileId(null);
+    setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
   };
 
@@ -259,7 +285,7 @@ export default function Installed() {
     try {
       // Same-file picks (true reinstall/update) replace the source install;
       // different-file picks add a new entry and the download backend will
-      // auto-disable any prior enabled variants of the same GameBanana mod.
+      // auto-disable any prior enabled sibling files of the same GameBanana mod.
       const sourceMod = detailsSourceModId ? mods.find((m) => m.id === detailsSourceModId) : null;
       if (sourceMod && sourceMod.gameBananaFileId === fileId) {
         await deleteMod(sourceMod.id);
@@ -341,40 +367,27 @@ export default function Installed() {
     setModToDelete(null);
   };
 
-  /**
-   * Switch the active variant in a group. Disables every other variant in
-   * the group first (sequential, so the priority bookkeeping stays sane),
-   * then enables the target. If the target is already enabled this is a
-   * no-op. Mutual exclusion is enforced here rather than in the store so the
-   * existing toggleMod action stays single-mod.
-   */
-  const setActiveVariant = async (group: Extract<ModEntry, { kind: 'group' }>, target: Mod) => {
-    for (const v of group.variants) {
-      if (v.id !== target.id && v.enabled) {
-        await toggleMod(v.id);
-      }
-    }
-    if (!target.enabled) {
+  const setVariantEnabled = async (target: Mod, enabled: boolean) => {
+    if (target.enabled !== enabled) {
       await toggleMod(target.id);
     }
   };
 
-  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
+  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean) => {
     for (const v of group.variants) {
-      if (v.enabled) {
+      if (v.enabled !== enabled) {
         await toggleMod(v.id);
       }
     }
   };
 
-  /** Top-level toggle on a grouped card. If anything's active, disable it;
-   *  otherwise enable the first variant by filename order (which becomes
-   *  the primary when nothing else is active). */
+  /** Top-level toggle on a grouped card. If anything is enabled, disable the
+   *  whole group; otherwise open the picker so the user can choose the files. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    if (group.active) {
-      await toggleMod(group.active.id);
-    } else if (group.variants.length > 0) {
-      await toggleMod(group.variants[0].id);
+    if (group.enabledVariants.length > 0) {
+      await setGroupEnabled(group, false);
+    } else {
+      setPickerGroupId(group.gameBananaId);
     }
   };
 
@@ -525,14 +538,7 @@ export default function Installed() {
     );
   }
 
-  const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
-  const disabledMods = mods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
-  const hasPriorityGap =
-    enabledMods.some((m, i) => m.priority !== i + 1) ||
-    disabledMods.some((m, i) => m.priority !== enabledMods.length + i + 1);
-  const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
-
-  // Group variants sharing a GB mod id under a single card. Singletons and
+  // Group files sharing a GB mod id under a single card. Singletons and
   // custom imports (no GB id) keep their old card behavior.
   const allEntries = buildModEntries(mods);
   const enabledEntries = allEntries
@@ -541,6 +547,9 @@ export default function Installed() {
   const disabledEntries = allEntries
     .filter((e) => !isEntryEnabled(e))
     .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
+  const compactOrder = buildCompactPriorityOrder(allEntries);
+  const needsPriorityCompact = compactOrder.some((m, i) => m.priority !== i + 1);
+  const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
   // reorder is still correct because it targets the full enabled list order,
@@ -568,7 +577,7 @@ export default function Installed() {
 
   /**
    * Entry-aware drag reorder. Singles move one mod; groups move all their
-   * variants as a block, keeping internal priority order. After the reshuffle
+   * files as a block, keeping internal priority order. After the reshuffle
    * we flatten back to a filename list and hand it to reorderMods, which
    * renames pak##_ prefixes to lock in new priorities.
    */
@@ -592,10 +601,8 @@ export default function Installed() {
     const insertAt = position === 'before' ? targetIdx : targetIdx + 1;
     working.splice(insertAt, 0, sourceEntry);
 
-    const flatten = (es: ModEntry[]) =>
-      es.flatMap((e) => (e.kind === 'single' ? [e.mod] : e.variants));
-    const next = flatten(working);
-    const prev = flatten(entries);
+    const next = flattenEntries(working);
+    const prev = flattenEntries(entries);
     const unchanged = next.every((m, i) => m.id === prev[i]?.id);
     if (unchanged) return;
 
@@ -603,11 +610,10 @@ export default function Installed() {
   };
 
   const compactPriorities = () => {
-    // Renumber every installed mod sequentially (enabled first, then disabled)
-    // so priority slots are tight 1..N with no gaps from prior delete/disable.
-    const ordered = [...enabledMods, ...disabledMods];
-    if (ordered.length === 0) return;
-    reorderMods(ordered.map((m) => m.fileName));
+    // Renumber every installed file sequentially. Mixed groups are split by
+    // enabled state so disabled files don't reserve holes in the enabled run.
+    if (compactOrder.length === 0) return;
+    reorderMods(compactOrder.map((m) => m.fileName));
   };
 
   /**
@@ -616,14 +622,12 @@ export default function Installed() {
    * each carry a 40-line inline JSX block.
    *
    * Group cards:
-   *   - Drag-reorder is disabled (the underlying VPKs span multiple priority
-   *     slots; meaningful group-level reorder needs more design).
-   *   - Toggle hits the active variant (or enables the first variant when
-   *     the group is fully disabled).
-   *   - Delete asks the user to confirm removing every variant.
-   *   - Card body click opens the variant picker modal.
-   *   - Conflicts shown are the union of conflicts on currently-enabled
-   *     variants (typically just one under mutual exclusion).
+   *   - Drag-reorder moves every file in the group as a block.
+   *   - Toggle disables every enabled file, or opens the picker when none
+   *     are enabled yet.
+   *   - Delete asks the user to confirm removing every file.
+   *   - Card body click opens the file selection modal.
+   *   - Conflicts shown are the union of conflicts on enabled files.
    */
   const renderEntryCard = (entry: ModEntry, section: 'enabled' | 'disabled') => {
     if (entry.kind === 'single') {
@@ -671,8 +675,8 @@ export default function Installed() {
       );
     }
     // Group entry. Stand-in `mod` is the primary so the card visuals look
-    // right; the `group` prop tells ModCard to swap filename for variant
-    // count and route clicks to the picker.
+    // right; the `group` prop tells ModCard to swap filename for file
+    // selection metadata and route clicks to the picker.
     const aggregateConflicts: ModConflict[] = [];
     for (const v of entry.variants) {
       if (v.enabled) {
@@ -683,17 +687,17 @@ export default function Installed() {
     const anyUpdateAvailable = entry.variants.some((v) => updatesAvailable.has(v.id));
     // Drag uses the primary's mod id as the representative for the whole
     // group. applyReorder maps this id back to the entry and moves the
-    // whole variant block.
+    // whole file block.
     const dragRepId = entry.primary.id;
     return (
       <ModCard
         key={entry.key}
         mod={{
           ...entry.primary,
-          // Group's overall enable state is "active variant exists", not
+          // Group's overall enable state is "one or more files enabled", not
           // the primary's individual flag (matches sort + section choice).
-          enabled: entry.active !== null,
-          // Card meta shows total size across variants.
+          enabled: entry.enabledVariants.length > 0,
+          // Card meta shows total size across the grouped files.
           size: entry.totalSize,
         }}
         viewMode={viewMode}
@@ -739,18 +743,14 @@ export default function Installed() {
         onDragEnd={resetDragState}
         group={{
           variantCount: entry.variants.length,
-          // Display the active variant's user-given label when set, else
-          // the author's GameBanana file header, else the original GB
-          // filename stem (covers mods whose author left descriptions
-          // blank — e.g. "galaxy_rem_gold"), else the raw VPK filename.
-          // Lets the user see "Red preset" / "Gold w/ alt candle" on the
-          // card instead of "pak06_dir.vpk".
-          activeFileName: entry.active
-            ? (entry.active.variantLabel ??
-               entry.active.fileDescription ??
-               entry.active.sourceFileName ??
-               entry.active.fileName)
-            : null,
+          // Display friendly names for enabled files when possible.
+          enabledCount: entry.enabledVariants.length,
+          enabledLabels: entry.enabledVariants.map((variant) =>
+            variant.variantLabel ??
+            variant.fileDescription ??
+            variant.sourceFileName ??
+            variant.fileName
+          ),
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
       />
@@ -884,12 +884,12 @@ export default function Installed() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <SectionHeader count={visibleEnabled.length} className="!mb-0">Enabled</SectionHeader>
-            {hasPriorityGap && !searchNeedle && (
+            {needsPriorityCompact && !searchNeedle && (
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={compactPriorities}
-                title="Renumber all installed mods 1, 2, 3, … to remove gaps from disable/delete"
+                title="Renumber installed files and keep enabled files from the same mod together"
               >
                 Compact priorities
               </Button>
@@ -959,13 +959,13 @@ export default function Installed() {
 
       <ConfirmModal
         isOpen={!!modToDelete}
-        title={modToDelete?.isGroup ? `Delete ${modToDelete.ids.length} variants?` : 'Delete Mod?'}
+        title={modToDelete?.isGroup ? `Delete ${modToDelete.ids.length} files?` : 'Delete Mod?'}
         message={
           modToDelete?.isGroup ? (
             <>
-              Delete all {modToDelete.ids.length} variants of{' '}
+              Delete all {modToDelete.ids.length} files from{' '}
               <span className="font-medium text-text-primary">{modToDelete.name}</span>? This
-              removes every VPK in the group. To keep some, cancel and use the variant picker
+              removes every VPK in the group. To keep some, cancel and use the file picker
               instead.
             </>
           ) : (
@@ -995,7 +995,7 @@ export default function Installed() {
         if (pickerGroupId === null) return null;
         // Derive the live entry from current mods so deletes inside the
         // picker reflect immediately. If the group has disappeared (all
-        // variants deleted or moved), auto-close the picker.
+        // files deleted or moved), auto-close the picker.
         const liveEntry = allEntries.find(
           (e) => e.kind === 'group' && e.gameBananaId === pickerGroupId
         ) as Extract<ModEntry, { kind: 'group' }> | undefined;
@@ -1004,12 +1004,28 @@ export default function Installed() {
           queueMicrotask(() => setPickerGroupId(null));
           return null;
         }
+        const liveVariantIds = new Set(liveEntry.variants.map((v) => v.id));
+        const conflictsByVariantId = Object.fromEntries(
+          liveEntry.variants.map((variant) => {
+            const conflicts = (conflictMap.get(variant.id) ?? [])
+              .filter((conflict) => {
+                const peerId = conflict.modA === variant.id ? conflict.modB : conflict.modA;
+                return liveVariantIds.has(peerId);
+              })
+              .map((conflict) => {
+                const peerName = conflict.modA === variant.id ? conflict.modBName : conflict.modAName;
+                return `${peerName}: ${conflict.details}`;
+              });
+            return [variant.id, conflicts];
+          })
+        );
         return (
           <VariantPickerModal
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
-            onSelect={(target) => setActiveVariant(liveEntry, target)}
-            onDisableAll={() => disableEntireGroup(liveEntry)}
+            onSetVariantEnabled={(variant, enabled) => setVariantEnabled(variant, enabled)}
+            onReorderVariants={(orderedFileNames) => reorderMods(orderedFileNames)}
+            conflictsByVariantId={conflictsByVariantId}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
@@ -1066,7 +1082,7 @@ export default function Installed() {
           section={detailsSection}
           installed={true}
           installedFileIds={detailsInstalledFileIds}
-          activeFileId={detailsActiveFileId}
+          activeFileIds={detailsActiveFileIds}
           downloadingFileId={null}
           extracting={false}
           progress={null}
@@ -1167,15 +1183,14 @@ interface ModCardProps {
   onDragLeaveCard?: () => void;
   onDrop?: () => void;
   onDragEnd?: () => void;
-  /** Present when this card represents a grouped set of variants (same
-   *  GameBanana mod, multiple VPKs). Swaps the filename meta for a variants
-   *  count and routes the card-body click to the picker modal. */
+  /** Present when this card represents grouped files from the same
+   *  GameBanana mod. Swaps the filename meta for an enabled/total count and
+   *  routes the card-body click to the picker modal. */
   group?: {
     variantCount: number;
-    /** Filename of the currently-active variant, or null if the group is
-     *  fully disabled. Shown in small text so the user can tell at a glance
-     *  which preset is live. */
-    activeFileName: string | null;
+    /** Enabled file labels for this group. Empty when fully disabled. */
+    enabledCount: number;
+    enabledLabels: string[];
     onOpenPicker: () => void;
   };
 }
@@ -1204,6 +1219,17 @@ function ModCard({
   const hasConflicts = conflicts.length > 0;
   const handleDownRef = useRef<boolean>(false);
   const isGroupCard = !!group;
+  const enabledBadgeLabel = group
+    ? group.enabledCount === 1
+      ? group.enabledLabels[0]
+      : `${group.enabledCount}/${group.variantCount} enabled`
+    : null;
+  const enabledTitle = group?.enabledLabels.join(', ') ?? '';
+  const enabledBadgeTitle = group
+    ? group.enabledCount === 1
+      ? `1/${group.variantCount} enabled: ${enabledTitle} - click card to choose files`
+      : `${group.enabledCount}/${group.variantCount} enabled${enabledTitle ? `: ${enabledTitle}` : ''} - click card to choose files`
+    : '';
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -1316,11 +1342,11 @@ function ModCard({
                 </Tag>
               )}
             </div>
-            {/* Active-variant badge anchored at the bottom so it doesn't fight
+            {/* Enabled-file badge anchored at the bottom so it doesn't fight
                 the top-right Conflict/Update stack or visually clash with the
                 accent-colored Enable toggle in the card body. A short gradient
                 behind it keeps the label legible against busy thumbnail art. */}
-            {group?.activeFileName && (
+            {group && group.enabledCount > 0 && enabledBadgeLabel && (
               <>
                 <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/75 via-black/40 to-transparent z-[5]" />
                 <div className="absolute bottom-2 left-2 right-2 z-10 flex">
@@ -1328,10 +1354,10 @@ function ModCard({
                     tone="info"
                     variant="overlay"
                     icon={Layers}
-                    title={`Active variant: ${group.activeFileName} — click card to switch`}
+                    title={enabledBadgeTitle}
                     className="max-w-full"
                   >
-                    <span className="truncate">{group.activeFileName}</span>
+                    <span className="truncate">{enabledBadgeLabel}</span>
                   </Tag>
                 </div>
               </>
@@ -1357,8 +1383,8 @@ function ModCard({
                 }}
                 disabled={!onOpenDetails}
                 className="absolute inset-0 w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
-                title={onOpenDetails ? (isGroupCard ? 'Pick variant' : 'View mod details') : undefined}
-                aria-label={onOpenDetails ? (isGroupCard ? `Pick a variant for ${mod.name}` : `View details for ${mod.name}`) : undefined}
+                title={onOpenDetails ? (isGroupCard ? 'Choose files' : 'View mod details') : undefined}
+                aria-label={onOpenDetails ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
               >
                 {heroRenderUrl ? (
                   <>
@@ -1410,8 +1436,8 @@ function ModCard({
             }}
             disabled={!onOpenDetails}
             className="group relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
-            title={onOpenDetails ? (isGroupCard ? 'Pick variant' : 'View mod details') : undefined}
-            aria-label={onOpenDetails ? (isGroupCard ? `Pick a variant for ${mod.name}` : `View details for ${mod.name}`) : undefined}
+            title={onOpenDetails ? (isGroupCard ? 'Choose files' : 'View mod details') : undefined}
+            aria-label={onOpenDetails ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
           >
             <ModThumbnail
               src={mod.thumbnailUrl}
@@ -1486,26 +1512,18 @@ function ModCard({
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
             <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-            {group ? (
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium" title="Click the card to pick a variant">
-                {group.variantCount} variants
+            {group && viewMode === 'list' ? (
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium truncate max-w-48" title={enabledBadgeTitle}>
+                {enabledBadgeLabel}
               </span>
-            ) : (
+            ) : !group ? (
               <span
                 className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
                 title={mod.fileName}
               >
                 {mod.fileName}
               </span>
-            )}
-            {group?.activeFileName && (
-              <span
-                className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
-                title={`Active: ${group.activeFileName}`}
-              >
-                {group.activeFileName}
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -1533,8 +1551,8 @@ function ModCard({
                 onOpenDetails();
               }}
               className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
-              title={isGroupCard ? 'Pick variant' : 'View mod details'}
-              aria-label={isGroupCard ? `Pick a variant for ${mod.name}` : `View details for ${mod.name}`}
+              title={isGroupCard ? 'Choose files' : 'View mod details'}
+              aria-label={isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`}
             >
               <Info className="w-4 h-4" />
             </button>

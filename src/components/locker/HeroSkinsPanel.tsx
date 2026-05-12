@@ -1,5 +1,6 @@
+import { useMemo } from 'react';
 import type { Mod } from '../../types/mod';
-import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
+import { groupLockerSkins, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { Skeleton } from '../common/Skeleton';
@@ -47,8 +48,9 @@ export default function HeroSkinsPanel({
   selectedMinaVariant,
   onApplyMinaVariant,
 }: HeroSkinsPanelProps) {
-  const hasMods = mods.length > 0;
-  const activeMod = mods.find((mod) => mod.enabled);
+  const skins = useMemo(() => groupLockerSkins(mods), [mods]);
+  const hasMods = skins.length > 0;
+  const activeSkin = skins.find((skin) => skin.enabledVariants.length > 0);
 
   // TEMPORARY: Hide Mina variant customization UI until feature is stable
   const HIDE_MINA_VARIANTS = true;
@@ -327,37 +329,49 @@ export default function HeroSkinsPanel({
       )}
 
       {hasMods ? (
-        mods.map((mod) => (
-          <button
-            key={mod.id}
-            onClick={() => onSelect(mod.id)}
-            className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors cursor-pointer ${mod.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
-              }`}
-            title={mod.enabled ? 'Active skin' : 'Set active'}
-          >
-            <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-              <ModThumbnail
-                src={mod.thumbnailUrl}
-                alt={mod.name}
-                nsfw={mod.nsfw}
-                hideNsfw={hideNsfwPreviews}
-                className="w-full h-full"
-                fallback={
-                  <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
-                    No preview
-                  </div>
-                }
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="font-medium truncate">{mod.name}</div>
-              <div className="text-xs text-text-secondary truncate">{mod.fileName}</div>
-            </div>
-            {activeMod?.id === mod.id && (
-              <span className="ml-auto text-xs text-accent font-semibold">Active</span>
-            )}
-          </button>
-        ))
+        skins.map((skin) => {
+          const mod = skin.primary;
+          const active = skin.enabledVariants.length > 0;
+          const showActiveLabel = activeSkin?.key === skin.key;
+          const hasVariants = skin.variants.length > 1;
+          const enabledSuffix =
+            skin.enabledVariants.length > 0 ? `, ${skin.enabledVariants.length} enabled` : '';
+          const subtitle = hasVariants
+            ? `${skin.variants.length} files${enabledSuffix}`
+            : mod.fileName;
+
+          return (
+            <button
+              key={skin.key}
+              onClick={() => onSelect(mod.id)}
+              className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors cursor-pointer ${active ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
+                }`}
+              title={active ? 'Active skin' : 'Set active'}
+            >
+              <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
+                <ModThumbnail
+                  src={mod.thumbnailUrl}
+                  alt={mod.name}
+                  nsfw={mod.nsfw}
+                  hideNsfw={hideNsfwPreviews}
+                  className="w-full h-full"
+                  fallback={
+                    <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
+                      No preview
+                    </div>
+                  }
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium truncate">{mod.name}</div>
+                <div className="text-xs text-text-secondary truncate">{subtitle}</div>
+              </div>
+              {showActiveLabel && (
+                <span className="ml-auto text-xs text-accent font-semibold">Active</span>
+              )}
+            </button>
+          );
+        })
       ) : (
         <div className="text-xs text-text-secondary">
           Download a skin for this hero to manage it here.
@@ -367,7 +381,9 @@ export default function HeroSkinsPanel({
       {categoryId && onRefreshMods && (
         <DownloadableSkinsSection
           categoryId={categoryId}
-          installedModIds={mods.map((m) => m.gameBananaId).filter((id): id is number => id !== undefined)}
+          installedModIds={Array.from(
+            new Set(mods.map((m) => m.gameBananaId).filter((id): id is number => id !== undefined))
+          )}
           hideNsfwPreviews={hideNsfwPreviews}
           onDownloadComplete={onRefreshMods}
         />

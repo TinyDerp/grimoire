@@ -27,11 +27,9 @@ interface ModDetailsModalProps {
   section: string;
   installed: boolean;
   installedFileIds: Set<number>;
-  /** GameBanana file id of the currently-enabled variant, when any. The file
-   *  row with this id gets an "Active" badge so the user can see which of
-   *  several installed variants is the one actually loaded. Browse uses null
-   *  (it has no notion of which variant is active across the whole library). */
-  activeFileId?: number | null;
+  /** GameBanana file ids of enabled files, when known. Matching file rows get
+   *  an "Active" badge so the user can see what is actually loaded. */
+  activeFileIds?: Set<number>;
   /** Per-file local install state, keyed by GameBanana file id. When provided
    *  (Browse only — Installed leaves this undefined), an installed-but-disabled
    *  file row shows an inline "Enable" pill so the user can flip it on without
@@ -56,7 +54,7 @@ export default function ModDetailsModal({
   section,
   installed,
   installedFileIds,
-  activeFileId = null,
+  activeFileIds = new Set<number>(),
   installedFileStates,
   onEnableFile,
   downloadingFileId,
@@ -361,7 +359,7 @@ export default function ModDetailsModal({
                     {mod.files.map((file) => {
                       const isInstalled = installedFileIds.has(file.id);
                       const isUpdate = updateAvailable && isInstalled;
-                      const isActive = activeFileId !== null && activeFileId === file.id;
+                      const isActive = activeFileIds.has(file.id);
                       const isDownloadingThis = downloadingFileId === file.id;
                       const installedFileState = installedFileStates?.get(file.id);
                       const showEnablePill =

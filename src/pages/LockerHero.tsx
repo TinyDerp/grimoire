@@ -16,12 +16,15 @@ import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
+  countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
+  getLockerSkinKey,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
   groupModsByCategory,
+  isLockerManagedMod,
   parseMinaVariant,
   type MinaSelection,
   type MinaVariant,
@@ -115,8 +118,10 @@ export default function LockerHero() {
 
   const heroList = useMemo(() => buildHeroList(categories), [categories]);
   const hero = heroList.find((entry) => entry.id === heroId);
-  const heroMods = useMemo(() => groupModsByCategory(mods), [mods]);
-  const list = hero ? heroMods.map.get(hero.id) ?? [] : [];
+  const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
+  const heroMods = useMemo(() => groupModsByCategory(lockerMods, heroList), [lockerMods, heroList]);
+  const list = useMemo(() => (hero ? heroMods.map.get(hero.id) ?? [] : []), [hero, heroMods]);
+  const skinCount = useMemo(() => countLockerSkins(list), [list]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -129,12 +134,26 @@ export default function LockerHero() {
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = heroMods.map.get(hero.id) ?? [];
+    const selected = heroModList.find((mod) => mod.id === modId);
+    if (!selected) return;
+
+    const selectedSkinKey = getLockerSkinKey(selected);
+    const selectedSkinFiles = heroModList.filter((mod) => getLockerSkinKey(mod) === selectedSkinKey);
+    const selectedEnabledFiles = selectedSkinFiles.filter((mod) => mod.enabled);
+    const otherEnabledFiles = heroModList.filter(
+      (mod) => getLockerSkinKey(mod) !== selectedSkinKey && mod.enabled
+    );
     const actions: Promise<void>[] = [];
-    for (const mod of heroModList) {
-      if (mod.id === modId) {
-        if (!mod.enabled) actions.push(toggleMod(mod.id));
-      } else if (mod.enabled) {
+    if (selectedEnabledFiles.length > 0 && otherEnabledFiles.length === 0) {
+      for (const mod of selectedEnabledFiles) {
         actions.push(toggleMod(mod.id));
+      }
+    } else {
+      for (const mod of otherEnabledFiles) {
+        actions.push(toggleMod(mod.id));
+      }
+      if (selectedEnabledFiles.length === 0 && !selected.enabled) {
+        actions.push(toggleMod(selected.id));
       }
     }
     await Promise.all(actions);
@@ -295,7 +314,7 @@ export default function LockerHero() {
               />
             )}
             <span className="text-sm text-text-secondary">
-              {list.length > 0 ? `${list.length} skin${list.length !== 1 ? 's' : ''}` : 'No skins'}
+              {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins'}
             </span>
           </div>
 
