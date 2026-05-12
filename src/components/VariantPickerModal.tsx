@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Check, Trash2, Power, PowerOff, Info, Pencil } from 'lucide-react';
+import { X, Check, Trash2, Power, PowerOff, Info, Pencil, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { Button } from './common/ui';
+
+type DropPosition = 'before' | 'after';
 
 interface Props {
     /** Display name shared by the variants (use primary.name). */
@@ -11,6 +13,16 @@ interface Props {
      *  multiple can be active at once (e.g. a model VPK + its voice-lines
      *  addon from the same mod page). */
     onToggle: (target: Mod) => Promise<void> | void;
+    /** Swap a variant with its picker-neighbor (up = earlier load slot,
+     *  down = later, wins overlapping file conflicts). Caller is responsible
+     *  for refusing cross-section swaps; this picker just disables the
+     *  button when the neighbor isn't in the same enabled state. */
+    onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
+    /** Drag-drop reorder. Drops source before or after neighbor in load
+     *  order. Same cross-section constraint as onMoveVariant — the picker
+     *  refuses to set dropTargetId when source and target are in different
+     *  enabled states, so this handler can assume same-section. */
+    onReorderVariantTo: (source: Mod, neighbor: Mod, position: DropPosition) => Promise<void> | void;
     /** Called when the user disables every currently-enabled variant. */
     onDisableAll: () => Promise<void> | void;
     /** Called when the user requests deletion of a single variant. */
@@ -49,6 +61,8 @@ export default function VariantPickerModal({
     modName,
     variants,
     onToggle,
+    onMoveVariant,
+    onReorderVariantTo,
     onDisableAll,
     onDeleteVariant,
     onRenameVariant,
@@ -60,6 +74,21 @@ export default function VariantPickerModal({
     // working draft text; null when no row is in edit mode.
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
+    // Drag-and-drop state. dropPosition is computed from cursor Y vs row
+    // midpoint; the visual indicator (top/bottom border on the target row)
+    // matches the position the source will land in. handleDownRef gates the
+    // drag to the grip icon so clicks on toggle/rename/delete/chevrons don't
+    // accidentally start one.
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+    const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
+    const handleDownRef = useRef(false);
+    const resetDrag = () => {
+        setDraggingId(null);
+        setDropTargetId(null);
+        setDropPosition(null);
+        handleDownRef.current = false;
+    };
 
     // Focus + select when the editing target changes (entering edit mode
     // for a new row). Driven by the id alone so we don't re-focus on every
@@ -130,6 +159,16 @@ export default function VariantPickerModal({
         }
     };
 
+    const move = async (variant: Mod, direction: 'up' | 'down') => {
+        if (pending) return;
+        setPending(`move:${variant.id}:${direction}`);
+        try {
+            await onMoveVariant(variant, direction);
+        } finally {
+            setPending(null);
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
@@ -173,12 +212,27 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
-                    {variants.map((v) => {
+                    {variants.map((v, idx) => {
                         const isActive = v.enabled;
                         const isPending = pending === v.id;
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
                         const isRenamePending = pending === `rename:${v.id}`;
+                        // Reorder buttons swap with the picker-neighbor in load
+                        // order. Allowed only when the neighbor shares the
+                        // variant's enabled state — cross-section swaps would
+                        // flip a variant's on/off status implicitly. Hide the
+                        // controls entirely when the group has just one
+                        // variant (nothing to swap with).
+                        const prev = idx > 0 ? variants[idx - 1] : null;
+                        const nextSibling = idx < variants.length - 1 ? variants[idx + 1] : null;
+                        const canMoveUp = !!prev && prev.enabled === v.enabled;
+                        const canMoveDown = !!nextSibling && nextSibling.enabled === v.enabled;
+                        const showReorder = variants.length > 1;
+                        const isMoveUpPending = pending === `move:${v.id}:up`;
+                        const isMoveDownPending = pending === `move:${v.id}:down`;
+                        const isDragging = draggingId === v.id;
+                        const isDropTarget = dropTargetId === v.id;
                         // Title precedence: user rename wins, else the
                         // GameBanana file header the author set (e.g. "Gold
                         // w/ alt candle"), else the original GB filename
@@ -198,12 +252,85 @@ export default function VariantPickerModal({
                         return (
                             <div
                                 key={v.id}
-                                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                                draggable={showReorder && !isEditing && !pending}
+                                onDragStart={(e) => {
+                                    if (!handleDownRef.current) {
+                                        e.preventDefault();
+                                        return;
+                                    }
+                                    handleDownRef.current = false;
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    try {
+                                        e.dataTransfer.setData('text/plain', v.id);
+                                    } catch {
+                                        // Firefox is picky about setData; ignore failures.
+                                    }
+                                    setDraggingId(v.id);
+                                }}
+                                onDragOver={(e) => {
+                                    if (!draggingId || draggingId === v.id) return;
+                                    const source = variants.find((x) => x.id === draggingId);
+                                    if (!source || source.enabled !== v.enabled) return;
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const midY = rect.top + rect.height / 2;
+                                    const pos: DropPosition = e.clientY < midY ? 'before' : 'after';
+                                    setDropTargetId(v.id);
+                                    setDropPosition(pos);
+                                }}
+                                onDragLeave={(e) => {
+                                    // Children fire dragleave on the row; only clear when the
+                                    // cursor actually exits the row's bounding box.
+                                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                    if (dropTargetId === v.id) {
+                                        setDropTargetId(null);
+                                        setDropPosition(null);
+                                    }
+                                }}
+                                onDrop={async (e) => {
+                                    e.preventDefault();
+                                    const sourceId = draggingId;
+                                    const pos = dropPosition;
+                                    resetDrag();
+                                    if (!sourceId || sourceId === v.id || !pos) return;
+                                    const source = variants.find((x) => x.id === sourceId);
+                                    if (!source || source.enabled !== v.enabled) return;
+                                    setPending(`move:${sourceId}:drag`);
+                                    try {
+                                        await onReorderVariantTo(source, v, pos);
+                                    } finally {
+                                        setPending(null);
+                                    }
+                                }}
+                                onDragEnd={resetDrag}
+                                className={`relative flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                                     isActive
                                         ? 'border-accent/40 bg-accent/5'
                                         : 'border-border bg-bg-tertiary hover:bg-white/5'
-                                }`}
+                                } ${isDragging ? 'opacity-50' : ''}`}
                             >
+                                {isDropTarget && dropPosition && (
+                                    <span
+                                        aria-hidden
+                                        className={`absolute left-2 right-2 ${dropPosition === 'before' ? '-top-[3px]' : '-bottom-[3px]'} h-[3px] bg-accent pointer-events-none rounded-full`}
+                                    />
+                                )}
+                                {showReorder && (
+                                    <div
+                                        onMouseDown={() => {
+                                            handleDownRef.current = true;
+                                        }}
+                                        onMouseUp={() => {
+                                            handleDownRef.current = false;
+                                        }}
+                                        className="flex-shrink-0 p-1 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing select-none"
+                                        title="Drag to reorder"
+                                        aria-label="Drag to reorder"
+                                    >
+                                        <GripVertical className="w-4 h-4" />
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => pick(v)}
@@ -244,19 +371,12 @@ export default function VariantPickerModal({
                                                     className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                                                 />
                                             ) : (
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span
-                                                        className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
-                                                        title={primaryTitle}
-                                                    >
-                                                        {primaryTitle}
-                                                    </span>
-                                                    {isActive && (
-                                                        <span className="text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5 flex-shrink-0">
-                                                            Active
-                                                        </span>
-                                                    )}
-                                                </div>
+                                                <span
+                                                    className={`block truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
+                                                    title={primaryTitle}
+                                                >
+                                                    {primaryTitle}
+                                                </span>
                                             )}
                                             <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
                                                 <span className="flex-shrink-0">{formatBytes(v.size)}</span>
@@ -303,6 +423,50 @@ export default function VariantPickerModal({
                                     </div>
                                 ) : (
                                     <>
+                                        {showReorder && (
+                                            <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => move(v, 'up')}
+                                                    disabled={!!pending || !canMoveUp}
+                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                                    title={
+                                                        canMoveUp
+                                                            ? 'Move up (loads earlier — overlapping files lose to later loads)'
+                                                            : idx === 0
+                                                                ? 'Already first in load order'
+                                                                : 'Adjacent variant is in a different section'
+                                                    }
+                                                    aria-label="Move variant up in load order"
+                                                >
+                                                    {isMoveUpPending ? (
+                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <ChevronUp className="w-3.5 h-3.5" />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => move(v, 'down')}
+                                                    disabled={!!pending || !canMoveDown}
+                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                                    title={
+                                                        canMoveDown
+                                                            ? 'Move down (loads later — wins overlapping files)'
+                                                            : idx === variants.length - 1
+                                                                ? 'Already last in load order'
+                                                                : 'Adjacent variant is in a different section'
+                                                    }
+                                                    aria-label="Move variant down in load order"
+                                                >
+                                                    {isMoveDownPending ? (
+                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <ChevronDown className="w-3.5 h-3.5" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => startRename(v)}

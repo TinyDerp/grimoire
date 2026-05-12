@@ -63,6 +63,11 @@ export default function Conflicts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
+  // Bulk-ignore confirmation. `ignoringAll` blocks the modal action while
+  // the sequential ignoreConflict calls run so the user can't cancel
+  // mid-iteration and leave the page in a partial state.
+  const [ignoreAllConfirmOpen, setIgnoreAllConfirmOpen] = useState(false);
+  const [ignoringAll, setIgnoringAll] = useState(false);
   const [disabling, setDisabling] = useState(false);
   // Tracks which pair the user is currently toggling so we can disable just
   // that row's buttons during the round-trip without freezing the whole page.
@@ -109,10 +114,55 @@ export default function Conflicts() {
       setConflicts((prev) =>
         prev.filter((c) => conflictPairKey(c.modA, c.modB) !== key)
       );
+      // Sidebar's badge count is derived from getConflicts() and only refreshes
+      // on mods-list changes. Ignore/unignore don't touch mods, so notify the
+      // Sidebar explicitly — otherwise the badge stays stale until restart.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
     } finally {
       setPendingPair(null);
+    }
+  };
+
+  /**
+   * Bulk-ignore every currently active conflict pair. Sequential because the
+   * backend persists ignored pairs into app settings — parallel calls would
+   * race on the same settings object. Each call returns the full ignored
+   * list, so we take the last successful result and seed `ignored` once
+   * instead of N times. On any failure we re-fetch from the source of
+   * truth to avoid drifting; one toast captures the failure count rather
+   * than spamming the error banner per pair.
+   */
+  const handleIgnoreAll = async () => {
+    if (conflicts.length === 0) return;
+    setIgnoringAll(true);
+    const pairs = conflicts.slice();
+    let lastIgnored: string[] | null = null;
+    const failures: string[] = [];
+    try {
+      for (const c of pairs) {
+        try {
+          lastIgnored = await ignoreConflict(c.modA, c.modB);
+        } catch (err) {
+          failures.push(`${c.modA} ↔ ${c.modB}: ${String(err)}`);
+        }
+      }
+      if (lastIgnored) setIgnored(new Set(lastIgnored));
+      if (failures.length === 0) {
+        setConflicts([]);
+      } else {
+        // Partial failure — backend is the source of truth, refetch.
+        await loadConflicts();
+        setError(`Failed to ignore ${failures.length} pair${failures.length === 1 ? '' : 's'}. See console for details.`);
+        console.warn('[Conflicts] ignore-all failures:', failures);
+      }
+      // Single event after the whole batch — the Sidebar badge re-fetches
+      // once instead of N times during the loop.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } finally {
+      setIgnoringAll(false);
+      setIgnoreAllConfirmOpen(false);
     }
   };
 
@@ -126,6 +176,7 @@ export default function Conflicts() {
       // Re-detect so the unignored pair shows back up if still conflicting.
       const fresh = await getConflicts();
       setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
     } finally {
@@ -201,7 +252,19 @@ export default function Conflicts() {
             : 'Resolve conflicts between installed mods'
         }
         action={
-          <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+          <div className="flex items-center gap-2">
+            {conflicts.length > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => setIgnoreAllConfirmOpen(true)}
+                icon={EyeOff}
+                title="Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore."
+              >
+                Ignore all
+              </Button>
+            )}
+            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+          </div>
         }
         className="mb-6"
       />
@@ -390,6 +453,24 @@ export default function Conflicts() {
         }
         confirmLabel={disabling ? 'Disabling…' : 'Disable'}
         variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={ignoreAllConfirmOpen}
+        onCancel={() => !ignoringAll && setIgnoreAllConfirmOpen(false)}
+        onConfirm={handleIgnoreAll}
+        title={`Ignore all ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}?`}
+        message={
+          <>
+            <p className="mb-2">
+              Every currently active conflict pair will move to the <span className="text-text-primary font-medium">Ignored</span> section below.
+            </p>
+            <p className="text-xs text-text-tertiary">
+              Reversible — you can restore any pair individually with <em>Unignore</em>.
+            </p>
+          </>
+        }
+        confirmLabel={ignoringAll ? 'Ignoring…' : `Ignore ${conflicts.length}`}
       />
     </div>
   );
