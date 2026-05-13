@@ -129,12 +129,22 @@ export default function LockerHero() {
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = heroMods.map.get(hero.id) ?? [];
+    const clicked = heroModList.find((m) => m.id === modId);
+    if (!clicked) return;
     const actions: Promise<void>[] = [];
-    for (const mod of heroModList) {
-      if (mod.id === modId) {
-        if (!mod.enabled) actions.push(toggleMod(mod.id));
-      } else if (mod.enabled) {
-        actions.push(toggleMod(mod.id));
+    if (clicked.enabled) {
+      // Click again on the active skin disables it (and any sibling variants
+      // currently enabled), returning the hero to the default in-game skin.
+      for (const mod of heroModList) {
+        if (mod.enabled) actions.push(toggleMod(mod.id));
+      }
+    } else {
+      for (const mod of heroModList) {
+        if (mod.id === modId) {
+          if (!mod.enabled) actions.push(toggleMod(mod.id));
+        } else if (mod.enabled) {
+          actions.push(toggleMod(mod.id));
+        }
       }
     }
     await Promise.all(actions);
@@ -262,7 +272,7 @@ export default function LockerHero() {
         <button
           type="button"
           onClick={() => navigate('/locker')}
-          className="mt-3 px-4 py-2 rounded-lg bg-accent text-white"
+          className="mt-3 px-4 py-2 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer"
         >
           Back to Locker
         </button>
@@ -343,15 +353,6 @@ export default function LockerHero() {
             />
           </div>
 
-          {/* Quick Tips */}
-          <div className="rounded-xl border border-border bg-bg-tertiary p-4 text-sm text-text-secondary">
-            <div className="text-xs uppercase tracking-wider text-text-secondary mb-2">Quick Tips</div>
-            <ul className="space-y-1.5 text-xs">
-              <li>Pick a skin to set it active for this hero.</li>
-              <li>Only one skin can be enabled per hero at a time.</li>
-              <li>Use Favorites to keep your go-to heroes at the top.</li>
-            </ul>
-          </div>
         </div>
       </div>
 
@@ -399,7 +400,7 @@ function LockerHeroSkeleton() {
             <Skeleton className="h-3 w-24" />
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-10 w-10" rounded="md" />
+                <Skeleton className="h-20 w-20" rounded="md" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-3 w-3/4" />
                   <Skeleton className="h-2 w-1/3" />

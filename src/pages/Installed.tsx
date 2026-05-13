@@ -930,7 +930,7 @@ export default function Installed() {
           <p className="mb-2">No installed mods match &ldquo;{search}&rdquo;</p>
           <button
             onClick={() => setSearch('')}
-            className="mt-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
+            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             Clear search
           </button>
@@ -1909,7 +1909,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover text-black rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Import

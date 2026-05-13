@@ -163,7 +163,7 @@ export default function HeroSkinsPanel({
                     onMinaArchivePathChange?.('');
                   }
                 }}
-                className="w-full px-3 py-2 text-xs rounded-md bg-accent hover:bg-accent-hover text-white font-medium transition-colors cursor-pointer"
+                className="w-full px-3 py-2 text-xs rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary font-medium transition-colors cursor-pointer"
               >
                 Download Outfit Presets (252MB)
               </button>
@@ -390,7 +390,7 @@ export default function HeroSkinsPanel({
                   if (!isMulti) onSelect(primary.id);
                 }}
                 aria-disabled={isMulti}
-                className={`w-full flex items-center gap-2 px-2 py-2 text-left ${
+                className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
                   isMulti ? 'cursor-default' : 'cursor-pointer'
                 }`}
                 title={
@@ -401,7 +401,7 @@ export default function HeroSkinsPanel({
                       : 'Set active'
                 }
               >
-                <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
+                <div className="w-20 h-20 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
                   <ModThumbnail
                     src={primary.thumbnailUrl}
                     alt={primary.name}
@@ -452,7 +452,7 @@ export default function HeroSkinsPanel({
                         }
                         className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer max-w-[220px] truncate ${
                           variant.enabled
-                            ? 'border-accent bg-accent text-white shadow-sm'
+                            ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
                             : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
                         }`}
                       >

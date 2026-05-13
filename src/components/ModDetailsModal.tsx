@@ -450,10 +450,10 @@ export default function ModDetailsModal({
                             disabled={downloadingFileId !== null}
                             className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
                               isUpdate
-                                ? 'bg-accent hover:bg-accent-hover text-white'
+                                ? 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
                                 : isInstalled
                                   ? 'bg-bg-secondary hover:bg-bg-primary text-text-primary border border-border'
-                                  : 'bg-accent hover:bg-accent-hover text-white'
+                                  : 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
                             }`}
                           >
                             {isDownloadingThis ? (

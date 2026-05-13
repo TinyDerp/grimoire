@@ -31,7 +31,7 @@ export default function DownloadableSkinsSection({ categoryId }: DownloadableSki
       <button
         type="button"
         onClick={handleClick}
-        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-semibold transition-colors cursor-pointer"
+        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary text-sm font-semibold transition-colors cursor-pointer"
       >
         <Download className="w-4 h-4" />
         Browse more skins
