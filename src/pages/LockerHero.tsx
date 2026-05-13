@@ -283,14 +283,19 @@ export default function LockerHero() {
   return (
     <div className="relative flex h-full overflow-hidden">
       {/* Hero portrait — sits behind both panels so it can bleed through the
-          frosted-glass sidebar on the right side of the panel. On narrow
-          viewports (no portrait area) it falls back to the solid panel bg. */}
-      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in">
+          frosted-glass sidebar on the right side of the panel. The image is
+          sized to the window height with natural aspect ratio (h-full w-auto)
+          so wider viewports don't force object-cover to scale it up and chop
+          the head/feet off. Anchored to the right edge; whatever space is left
+          to the left of the image shows the solid bg-primary, which the
+          frosted overlay reads as a dark frosted panel — same look as if the
+          portrait extended that far. */}
+      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
         {renderSrc ? (
           <img
             src={renderSrc}
             alt={hero.name}
-            className="absolute inset-0 h-full w-full object-cover object-right"
+            className="absolute top-0 right-0 h-full w-auto max-w-none"
             onError={handleRenderError}
           />
         ) : (

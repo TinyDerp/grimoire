@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Download,
   Play,
+  Wand2,
   RotateCcw,
   Loader2,
   Menu,
@@ -446,7 +447,7 @@ export default function Sidebar() {
             {launchPending === 'modded' ? (
               <Loader2 className="w-[18px] h-[18px] animate-spin flex-shrink-0" />
             ) : (
-              <Play className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
+              <Wand2 className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
             )}
             {!collapsed && <span className="flex-1 text-left">Launch Modded</span>}
           </button>
