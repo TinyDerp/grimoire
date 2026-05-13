@@ -86,8 +86,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Check whether Deadlock is currently running. On Linux/Proton the process
- * still appears as deadlock.exe, so both platforms can key off the same name.
+ * Check whether Deadlock is currently running. On Linux/Proton the kernel
+ * comm name is truncated to 15 chars and Proton renames its main thread, so
+ * exact-comm matching (pgrep -x) misses the game. Match against the full
+ * cmdline (pgrep -f) instead, which finds both the game and its Proton
+ * wrapper chain.
  */
 export async function isDeadlockRunning(): Promise<boolean> {
     try {
@@ -100,7 +103,7 @@ export async function isDeadlockRunning(): Promise<boolean> {
             return /deadlock\.exe/i.test(result.stdout);
         }
         if (process.platform === 'linux') {
-            const result = await runCommand('pgrep', ['-x', DEADLOCK_PROCESS_NAME]);
+            const result = await runCommand('pgrep', ['-f', DEADLOCK_PROCESS_NAME]);
             return result.code === 0 && result.stdout.trim().length > 0;
         }
     } catch {
@@ -144,7 +147,7 @@ async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
         );
     }
     if (process.platform === 'linux') {
-        return runCommand('pkill', [force ? '-KILL' : '-TERM', '-x', DEADLOCK_PROCESS_NAME]);
+        return runCommand('pkill', [force ? '-KILL' : '-TERM', '-f', DEADLOCK_PROCESS_NAME]);
     }
     return { code: 0, stdout: '', stderr: '' };
 }
