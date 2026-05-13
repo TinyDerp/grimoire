@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
@@ -417,11 +418,26 @@ export default function HeroSkinsPanel({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-medium truncate">{primary.name}</div>
-                  <div className="text-xs text-text-secondary truncate">
-                    {isMulti
-                      ? `${enabledCount}/${group.variants.length} active`
-                      : primary.fileName}
-                  </div>
+                  {isMulti ? (
+                    enabledCount === 0 ? (
+                      // Action prompt — the card itself isn't clickable for
+                      // multi-variant groups, so without this users see
+                      // "0/2 active" and have no idea what to do. The
+                      // chevron points at the pill row directly below.
+                      <div className="flex items-center gap-1 text-xs text-accent">
+                        <span>Pick a variant</span>
+                        <ChevronDown className="w-3 h-3" />
+                      </div>
+                    ) : (
+                      <div className="text-xs text-text-secondary truncate">
+                        {`${enabledCount}/${group.variants.length} active`}
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-xs text-text-secondary truncate">
+                      {primary.fileName}
+                    </div>
+                  )}
                 </div>
                 {!isMulti && groupActive && (
                   <span className="text-xs text-accent font-semibold">Active</span>
@@ -429,7 +445,9 @@ export default function HeroSkinsPanel({
               </button>
               {isMulti && (
                 <div
-                  className="flex flex-wrap gap-1.5 px-2.5 pb-2.5 pt-2 border-t border-border/60"
+                  className={`flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-2 border-t ${
+                    enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-border/60'
+                  }`}
                   role="group"
                   aria-label="Variant toggles"
                 >
