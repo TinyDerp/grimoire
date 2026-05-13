@@ -3,18 +3,20 @@
   <h1>Grimoire</h1>
   <p>A mod manager for Deadlock.</p>
 
-  [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square&logo=github&logoColor=white&label=release&color=1f2328&labelColor=1f2328)](../../releases/latest)
-  ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-1f2328?style=flat-square&labelColor=1f2328)
-  [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A?style=flat-square&labelColor=1f2328)](https://gamebanana.com/tools/22583)
-  [![License](https://img.shields.io/github/license/Slush97/grimoire?style=flat-square&color=1f2328&labelColor=1f2328)](LICENSE)
+  [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?label=release)](../../releases/latest)
+  [![AUR](https://img.shields.io/aur/version/grimoire-bin?label=aur)](https://aur.archlinux.org/packages/grimoire-bin)
+  [![CI](https://img.shields.io/github/actions/workflow/status/Slush97/grimoire/ci.yml?branch=main&label=ci)](../../actions/workflows/ci.yml)
+  [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A)](https://gamebanana.com/tools/22583)
+  [![License](https://img.shields.io/github/license/Slush97/grimoire)](LICENSE)
 </div>
 
-## Download
+## Install
 
 [Latest release →](../../releases/latest)
 
 - Windows: `Grimoire-Setup-x.y.z.exe`
 - Linux: `.AppImage` or `.deb`
+- Arch Linux: `yay -S grimoire-bin` ([AUR](https://aur.archlinux.org/packages/grimoire-bin))
 
 Requires Deadlock installed via Steam.
 
