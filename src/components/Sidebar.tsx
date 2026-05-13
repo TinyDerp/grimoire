@@ -1,19 +1,21 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Package,
-  Search,
-  Shield,
+  Boxes,
+  Compass,
+  Archive,
+  Target,
+  ScrollText,
+  Activity,
+  Swords,
+  BookMarked,
+  Settings2,
   AlertTriangle,
-  Layers,
-  Settings,
-  Crosshair,
-  Terminal,
-  BarChart3,
   Download,
   Play,
   RotateCcw,
   Loader2,
+  Menu,
 } from 'lucide-react';
 import {
   getConflicts,
@@ -28,6 +30,8 @@ import {
 
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
+
+const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
@@ -52,6 +56,19 @@ export default function Sidebar() {
     action?: { label: string; onClick: () => void | Promise<void> };
   } | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+
+  // Persisted via localStorage so it survives reloads without round-tripping
+  // through the main-process settings file — this is pure UI state.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(COLLAPSED_KEY) === '1';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch { /* quota / private mode */ }
+  }, [collapsed]);
 
   const refreshStashStatus = useCallback(async () => {
     try {
@@ -162,7 +179,7 @@ export default function Sidebar() {
     type BadgeTone = 'muted' | 'warning';
     type NavItem = {
       to: string;
-      icon: typeof Package;
+      icon: typeof Boxes;
       label: string;
       tooltip: string;
       experimental?: 'crosshair' | 'stats';
@@ -170,15 +187,15 @@ export default function Sidebar() {
       badgeTone?: BadgeTone;
     };
     const items: NavItem[] = [
-      { to: '/', icon: Package, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
-      { to: '/browse', icon: Search, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
-      { to: '/locker', icon: Shield, label: 'Locker', tooltip: "Saved mods you haven't installed yet." },
-      { to: '/crosshair', icon: Crosshair, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
-      { to: '/autoexec', icon: Terminal, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
-      { to: '/stats', icon: BarChart3, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
-      { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
-      { to: '/profiles', icon: Layers, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
-      { to: '/settings', icon: Settings, label: 'Settings', tooltip: 'Configure game path, NSFW, and preferences.' },
+      { to: '/', icon: Boxes, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
+      { to: '/browse', icon: Compass, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
+      { to: '/locker', icon: Archive, label: 'Locker', tooltip: "Saved mods you haven't installed yet." },
+      { to: '/crosshair', icon: Target, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
+      { to: '/autoexec', icon: ScrollText, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
+      { to: '/stats', icon: Activity, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
+      { to: '/conflicts', icon: Swords, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
+      { to: '/profiles', icon: BookMarked, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
+      { to: '/settings', icon: Settings2, label: 'Settings', tooltip: 'Configure game path, NSFW, and preferences.' },
     ];
 
     return items.filter((item) => {
@@ -250,46 +267,82 @@ export default function Sidebar() {
   const canLaunch = !!settings?.deadlockPath || !!settings?.devDeadlockPath;
 
   return (
-    <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col h-full min-h-0">
-      <div className="px-3 pt-3 pb-2 border-b border-border text-center flex-shrink-0">
-        <span
-          className="text-2xl text-accent block leading-none"
-          style={{ fontFamily: "'IM Fell English', serif" }}
+    <aside
+      className={`${collapsed ? 'w-16' : 'w-56'} bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 transition-[width] duration-200 ease-out`}
+    >
+      <div
+        className={`relative flex-shrink-0 border-b border-border ${
+          collapsed ? 'px-2 pt-2 pb-2 flex items-center justify-center' : 'px-3 pt-3 pb-2 text-center'
+        }`}
+      >
+        {!collapsed && (
+          <span
+            className="text-2xl text-accent block leading-none"
+            style={{ fontFamily: "'IM Fell English', serif" }}
+          >
+            Grimoire
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className={`flex items-center justify-center w-7 h-7 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+            collapsed ? '' : 'absolute top-1/2 right-2 -translate-y-1/2'
+          }`}
         >
-          Grimoire
-        </span>
-        <span className="text-[10px] text-text-secondary tracking-[0.2em] uppercase mt-1 block">
-          Mod Manager
-        </span>
+          <Menu className="w-4 h-4" />
+        </button>
       </div>
 
-      <nav className="flex-1 min-h-0 p-2 overflow-y-auto">
+      <nav className={`flex-1 min-h-0 overflow-y-auto ${collapsed ? 'p-1.5' : 'p-2'}`}>
         <ul className="space-y-0.5">
           {navItems.map(({ to, icon: Icon, label, tooltip, badge, badgeTone }) => (
             <li key={to}>
               <NavLink
                 to={to}
-                title={tooltip}
+                title={collapsed ? `${label} — ${tooltip}` : tooltip}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sm transition-colors ${
+                  `group relative flex items-center leading-5 rounded-md text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
+                    collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+                  } ${
                     isActive
-                      ? 'bg-accent/15 text-accent'
-                      : 'text-text-primary/70 hover:bg-bg-tertiary hover:text-text-primary'
+                      ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary font-medium'
+                      : 'border-transparent text-text-primary/80 font-medium hover:bg-bg-tertiary/60 hover:text-text-primary'
                   }`
                 }
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                <span className="flex-1">{label}</span>
-                {badge !== undefined && badge > 0 && (
-                  <span
-                    className={`px-1.5 py-0.5 text-xs font-medium rounded-full min-w-[20px] text-center ${
-                      badgeTone === 'warning'
-                        ? 'bg-state-warning text-black'
-                        : 'bg-bg-tertiary text-text-secondary'
-                    }`}
-                  >
-                    {badge}
-                  </span>
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      className={`w-5 h-5 flex-shrink-0 ${
+                        isActive ? 'text-accent' : 'text-text-primary/70 group-hover:text-text-primary'
+                      }`}
+                      strokeWidth={isActive ? 2 : 1.75}
+                    />
+                    {!collapsed && <span className="flex-1">{label}</span>}
+                    {badge !== undefined && badge > 0 && (
+                      collapsed ? (
+                        <span
+                          aria-hidden
+                          className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-bg-secondary ${
+                            badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent/80'
+                          }`}
+                        />
+                      ) : (
+                        <span
+                          className={`px-1.5 py-0.5 text-[11px] font-semibold tabular-nums rounded-full min-w-[20px] text-center leading-4 ${
+                            badgeTone === 'warning'
+                              ? 'bg-state-warning/90 text-black'
+                              : 'bg-bg-tertiary text-text-primary/80'
+                          }`}
+                        >
+                          {badge}
+                        </span>
+                      )
+                    )}
+                  </>
                 )}
               </NavLink>
             </li>
@@ -297,30 +350,50 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      <div className="flex-shrink-0 border-t border-border p-3 space-y-2.5">
+      <div
+        className={`flex-shrink-0 border-t border-border ${
+          collapsed ? 'p-1.5 space-y-1.5' : 'p-3 space-y-2'
+        }`}
+      >
         {stashStatus.active && (
-          <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="flex-1 leading-tight">
-              Vanilla — {stashStatus.modCount ?? 0} stashed
-            </span>
+          collapsed ? (
             <button
               onClick={handleRestoreNow}
               disabled={restorePending}
-              title="Restore stashed mods now"
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
+              title={`Vanilla session — ${stashStatus.modCount ?? 0} mod${stashStatus.modCount === 1 ? '' : 's'} stashed. Click to restore now.`}
+              className="w-full flex items-center justify-center h-10 rounded-md border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <RotateCcw className="w-3 h-3" />
+                <AlertTriangle className="w-4 h-4" />
               )}
-              Restore
             </button>
-          </div>
+          ) : (
+            <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="flex-1 leading-tight">
+                Vanilla — {stashStatus.modCount ?? 0} stashed
+              </span>
+              <button
+                onClick={handleRestoreNow}
+                disabled={restorePending}
+                title="Restore stashed mods now"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
+              >
+                {restorePending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-3 h-3" />
+                )}
+                Restore
+              </button>
+            </div>
+          )
         )}
 
-        {toast && (
+        {/* Toasts need horizontal room to read — suppress in collapsed mode. */}
+        {toast && !collapsed && (
           <div
             className={`rounded-md px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'
@@ -365,14 +438,16 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className="flex w-full items-center gap-3 h-11 px-3 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent text-sm font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex w-full items-center rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-accent text-sm font-semibold tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed ${
+              collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
+            }`}
           >
             {launchPending === 'modded' ? (
-              <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+              <Loader2 className="w-[18px] h-[18px] animate-spin flex-shrink-0" />
             ) : (
-              <Play className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
+              <Play className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
             )}
-            <span className="flex-1 text-left">Launch Modded</span>
+            {!collapsed && <span className="flex-1 text-left">Launch Modded</span>}
           </button>
 
           <button
@@ -385,28 +460,42 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active — restore mods first'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className="flex w-full items-center gap-3 h-11 px-3 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-tertiary text-sm font-medium tracking-wide transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className={`flex w-full items-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60 text-sm font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
+              collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
+            }`}
           >
             {launchPending === 'vanilla' ? (
-              <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+              <Loader2 className="w-[18px] h-[18px] animate-spin flex-shrink-0" />
             ) : (
-              <Play className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
+              <Play className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
             )}
-            <span className="flex-1 text-left">Launch Vanilla</span>
+            {!collapsed && <span className="flex-1 text-left">Launch Vanilla</span>}
           </button>
         </div>
 
-        <button
-          onClick={() => {
-            if (updateAvailable) setUpdateModalOpen(true);
-            else navigate('/settings');
-          }}
-          className="flex items-center justify-center gap-2 w-full pt-1 text-xs text-text-secondary cursor-pointer hover:text-accent transition-colors"
-          title={updateAvailable ? 'Update available — click to view release notes' : 'Open Settings'}
-        >
-          <span>{appVersion || 'v...'}</span>
-          {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}
-        </button>
+        {collapsed ? (
+          updateAvailable && (
+            <button
+              onClick={() => setUpdateModalOpen(true)}
+              title={`Update available — ${appVersion || 'click to view'}`}
+              className="flex items-center justify-center w-full h-7 text-accent cursor-pointer hover:bg-bg-tertiary rounded-md transition-colors"
+            >
+              <Download className="w-3.5 h-3.5 animate-pulse" />
+            </button>
+          )
+        ) : (
+          <button
+            onClick={() => {
+              if (updateAvailable) setUpdateModalOpen(true);
+              else navigate('/settings');
+            }}
+            className="flex items-center justify-center gap-2 w-full pt-1 text-xs text-text-secondary cursor-pointer hover:text-accent transition-colors"
+            title={updateAvailable ? 'Update available — click to view release notes' : 'Open Settings'}
+          >
+            <span>{appVersion || 'v...'}</span>
+            {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}
+          </button>
+        )}
       </div>
 
       {updateModalOpen && <UpdateModal onClose={() => setUpdateModalOpen(false)} />}
