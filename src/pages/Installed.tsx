@@ -32,6 +32,7 @@ import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import VariantPickerModal from '../components/VariantPickerModal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -752,6 +753,10 @@ export default function Installed() {
           enabled: entry.active !== null,
           // Card meta shows total size across variants.
           size: entry.totalSize,
+          installedAt: entry.variants.reduce(
+            (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
+            entry.primary.installedAt
+          ),
         }}
         viewMode={viewMode}
         hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
@@ -1204,6 +1209,7 @@ interface ModCardProps {
     enabled: boolean;
     priority: number;
     size: number;
+    installedAt: string;
     thumbnailUrl?: string;
     audioUrl?: string;
     sourceSection?: string;
@@ -1549,6 +1555,12 @@ function ModCard({
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
             <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
+            <span
+              className="flex-shrink-0 tabular-nums"
+              title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
+            >
+              {formatRelativeDate(mod.installedAt)}
+            </span>
             {group ? (
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium" title="Click the card to pick a variant">
                 {group.variantCount} variants

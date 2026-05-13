@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, Check, Trash2, Power, PowerOff, Info, Pencil, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { Button } from './common/ui';
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 
 type DropPosition = 'before' | 'after';
 
@@ -382,6 +383,13 @@ export default function VariantPickerModal({
                                                 <span className="flex-shrink-0">{formatBytes(v.size)}</span>
                                                 <span className="opacity-50 flex-shrink-0">•</span>
                                                 <span className="flex-shrink-0">Slot #{v.priority}</span>
+                                                <span className="opacity-50 flex-shrink-0">•</span>
+                                                <span
+                                                    className="flex-shrink-0 tabular-nums"
+                                                    title={`Installed ${formatAbsoluteDate(v.installedAt)}`}
+                                                >
+                                                    {formatRelativeDate(v.installedAt)}
+                                                </span>
                                                 {showSecondaryFileName && !isEditing && (
                                                     <>
                                                         <span className="opacity-50 flex-shrink-0">•</span>
