@@ -11,24 +11,22 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
-import VariantPickerModal from '../components/VariantPickerModal';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { Mod } from '../types/mod';
 import {
+  FAVORITE_HEROES_KEY,
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
   countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
-  getLockerSkinKey,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
-  groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
   parseMinaVariant,
+  readStoredFavorites,
   type MinaSelection,
   type MinaVariant,
 } from '../lib/lockerUtils';
@@ -37,13 +35,21 @@ export default function LockerHero() {
   const navigate = useNavigate();
   const params = useParams<{ heroId: string }>();
   const heroId = Number(params.heroId);
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod, reorderMods, setVariantLabel } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
+  // Seed from localStorage synchronously so the value is present on the very
+  // first render. Doing this in a useEffect instead would race against the
+  // save effect under StrictMode: the save closure captures `[]`, writes that
+  // back to localStorage, and the second load (which StrictMode replays) then
+  // reads the clobbered empty value and wins — silently dropping the user's
+  // saved favorites.
+  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>(() =>
+    readStoredFavorites()
+  );
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
   });
@@ -60,8 +66,6 @@ export default function LockerHero() {
     garter: 'Default',
     dress: 'Default',
   });
-  const [pickerSkinKey, setPickerSkinKey] = useState<string | null>(null);
-
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -99,21 +103,7 @@ export default function LockerHero() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem('lockerFavorites');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setFavoriteHeroes(parsed.filter((id) => typeof id === 'number'));
-        }
-      } catch {
-        setFavoriteHeroes([]);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('lockerFavorites', JSON.stringify(favoriteHeroes));
+    localStorage.setItem(FAVORITE_HEROES_KEY, JSON.stringify(favoriteHeroes));
   }, [favoriteHeroes]);
 
   useEffect(() => {
@@ -126,16 +116,6 @@ export default function LockerHero() {
   const heroMods = useMemo(() => groupModsByCategory(lockerMods, heroList), [lockerMods, heroList]);
   const list = useMemo(() => (hero ? heroMods.map.get(hero.id) ?? [] : []), [hero, heroMods]);
   const skinCount = useMemo(() => countLockerSkins(list), [list]);
-  const pickerSkin = useMemo(() => {
-    if (!pickerSkinKey) return null;
-    return groupLockerSkins(list).find((skin) => skin.key === pickerSkinKey) ?? null;
-  }, [list, pickerSkinKey]);
-
-  useEffect(() => {
-    if (pickerSkinKey && !pickerSkin) {
-      setPickerSkinKey(null);
-    }
-  }, [pickerSkinKey, pickerSkin]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -145,93 +125,47 @@ export default function LockerHero() {
     [minaVariants, minaSelection]
   );
 
-  const findFreshLockerTargetScope = (targetId: string) => {
-    if (!hero) return null;
-    const freshLockerMods = useAppStore.getState().mods.filter(isLockerManagedMod);
-    const freshHeroMods = groupModsByCategory(freshLockerMods, heroList);
-    const scope = freshHeroMods.map.get(hero.id) ?? [];
-    const target = scope.find((mod) => mod.id === targetId);
-    return target ? { target, scope } : null;
-  };
-
-  const setLockerVariantEnabled = async (target: Mod, enabled: boolean) => {
-    const fresh = findFreshLockerTargetScope(target.id);
-    if (!fresh) return;
-    const targetSkinKey = getLockerSkinKey(fresh.target);
-    if (enabled) {
-      for (const mod of fresh.scope) {
-        if (getLockerSkinKey(mod) !== targetSkinKey && mod.enabled) {
-          await toggleMod(mod.id);
-        }
-      }
-    }
-    if (fresh.target.enabled !== enabled) {
-      await toggleMod(fresh.target.id);
-    }
-  };
-
-  const reorderLockerVariantTo = async (
-    variants: Mod[],
-    source: Mod,
-    neighbor: Mod,
-    position: 'before' | 'after'
-  ) => {
-    if (source.id === neighbor.id || source.enabled !== neighbor.enabled) return;
-    const working = variants.slice();
-    const sourceIdx = working.findIndex((v) => v.id === source.id);
-    if (sourceIdx === -1) return;
-    const [moved] = working.splice(sourceIdx, 1);
-    const neighborIdx = working.findIndex((v) => v.id === neighbor.id);
-    if (neighborIdx === -1) return;
-    working.splice(position === 'before' ? neighborIdx : neighborIdx + 1, 0, moved);
-    await reorderMods(working.map((v) => v.fileName));
-  };
-
-  const moveLockerVariant = async (
-    variants: Mod[],
-    target: Mod,
-    direction: 'up' | 'down'
-  ) => {
-    const idx = variants.findIndex((v) => v.id === target.id);
-    if (idx === -1) return;
-    const neighbor = variants[direction === 'up' ? idx - 1 : idx + 1];
-    if (!neighbor) return;
-    await reorderLockerVariantTo(variants, target, neighbor, direction === 'up' ? 'before' : 'after');
-  };
-
-  const disableLockerVariants = async (variants: Mod[]) => {
-    for (const variant of variants) {
-      if (variant.enabled) {
-        await setLockerVariantEnabled(variant, false);
-      }
-    }
-  };
-
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = heroMods.map.get(hero.id) ?? [];
-    const selected = heroModList.find((mod) => mod.id === modId);
-    if (!selected) return;
-
-    const selectedSkinKey = getLockerSkinKey(selected);
-    const selectedSkinFiles = heroModList.filter((mod) => getLockerSkinKey(mod) === selectedSkinKey);
-    const selectedEnabledFiles = selectedSkinFiles.filter((mod) => mod.enabled);
-    const otherEnabledFiles = heroModList.filter(
-      (mod) => getLockerSkinKey(mod) !== selectedSkinKey && mod.enabled
-    );
+    const clicked = heroModList.find((m) => m.id === modId);
+    if (!clicked) return;
     const actions: Promise<void>[] = [];
-    if (selectedEnabledFiles.length > 0 && otherEnabledFiles.length === 0) {
-      for (const mod of selectedEnabledFiles) {
-        actions.push(toggleMod(mod.id));
+    if (clicked.enabled) {
+      // Click again on the active skin disables it (and any sibling variants
+      // currently enabled), returning the hero to the default in-game skin.
+      for (const mod of heroModList) {
+        if (mod.enabled) actions.push(toggleMod(mod.id));
       }
     } else {
-      for (const mod of otherEnabledFiles) {
-        actions.push(toggleMod(mod.id));
-      }
-      if (selectedEnabledFiles.length === 0 && !selected.enabled) {
-        actions.push(toggleMod(selected.id));
+      for (const mod of heroModList) {
+        if (mod.id === modId) {
+          if (!mod.enabled) actions.push(toggleMod(mod.id));
+        } else if (mod.enabled) {
+          actions.push(toggleMod(mod.id));
+        }
       }
     }
+    await Promise.all(actions);
+  };
+
+  // Toggle one variant within a group. Disables enabled mods from other groups
+  // for the hero, but leaves sibling variants in the same group alone so a
+  // model + voice-lines pair can stay co-enabled.
+  const toggleHeroVariant = async (modId: string) => {
+    if (!hero) return;
+    const heroModList = heroMods.map.get(hero.id) ?? [];
+    const target = heroModList.find((m) => m.id === modId);
+    if (!target) return;
+    const groupKey = target.gameBananaId ? `gb:${target.gameBananaId}` : `mod:${target.id}`;
+    const actions: Promise<void>[] = [];
+    for (const mod of heroModList) {
+      if (mod.id === modId) continue;
+      if (!mod.enabled) continue;
+      const otherKey = mod.gameBananaId ? `gb:${mod.gameBananaId}` : `mod:${mod.id}`;
+      if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
+    }
+    actions.push(toggleMod(modId));
     await Promise.all(actions);
   };
 
@@ -337,7 +271,7 @@ export default function LockerHero() {
         <button
           type="button"
           onClick={() => navigate('/locker')}
-          className="mt-3 px-4 py-2 rounded-lg bg-accent text-white"
+          className="mt-3 px-4 py-2 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer"
         >
           Back to Locker
         </button>
@@ -346,11 +280,84 @@ export default function LockerHero() {
   }
 
   return (
-    <>
-      <div className="flex h-full">
+    <div className="relative flex h-full overflow-hidden">
+      {/* Hero portrait — sits behind both panels so it can bleed through the
+          frosted-glass sidebar on the right side of the panel. The image is
+          sized to the window height with natural aspect ratio (h-full w-auto)
+          so wider viewports don't force object-cover to scale it up and chop
+          the head/feet off. Anchored to the right edge; whatever space is left
+          to the left of the image shows the solid bg-primary, which the
+          frosted overlay reads as a dark frosted panel — same look as if the
+          portrait extended that far. */}
+      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
+        {renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className="absolute top-0 right-0 h-full w-auto max-w-none"
+            onError={handleRenderError}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
+            {hero.name}
+          </div>
+        )}
+        {/* Bottom gradient for depth */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+      </div>
+
+      {/* Progressive frosted-glass background — every layer (including the
+          base heavy blur) is masked with a long, smooth taper so nothing has
+          a hard right edge. Stacking blurs compounds: a region under all
+          three layers is much more blurred than one under only the lightest.
+          So as the lighter layers fade out first, the effective blur softens
+          from "very heavy" through "medium" to "nothing" without ever
+          dropping off a cliff. The container is intentionally much wider
+          than the sidebar (sidebar is 400/450px; container is ~720/800px)
+          so the gradient has runway to feather all the way to clear. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[720px] xl:w-[800px]"
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(48px) saturate(135%)',
+            WebkitBackdropFilter: 'blur(48px) saturate(135%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+          }}
+        />
+      </div>
+
       {/* Left Panel - Skin Selection */}
-      <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary animate-slide-in-left">
-        <div className="p-6 space-y-6">
+      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto bg-bg-secondary lg:bg-transparent animate-slide-in-left">
+        <div className="relative z-10 p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
             <Link
@@ -400,9 +407,8 @@ export default function LockerHero() {
             <HeroSkinsPanel
               mods={list}
               onSelect={setActiveSkin}
-              onOpenVariantPicker={(skin) => setPickerSkinKey(skin.key)}
+              onToggleVariant={toggleHeroVariant}
               categoryId={hero.id}
-              onRefreshMods={loadMods}
               minaPresets={hero.name === 'Mina' ? minaPresets : []}
               activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
               minaTextures={hero.name === 'Mina' ? minaTextures : []}
@@ -420,57 +426,9 @@ export default function LockerHero() {
             />
           </div>
 
-          {/* Quick Tips */}
-          <div className="rounded-xl border border-border bg-bg-tertiary p-4 text-sm text-text-secondary">
-            <div className="text-xs uppercase tracking-wider text-text-secondary mb-2">Quick Tips</div>
-            <ul className="space-y-1.5 text-xs">
-              <li>Pick a skin to set it active for this hero.</li>
-              <li>Only one skin can be enabled per hero at a time.</li>
-              <li>Use Favorites to keep your go-to heroes at the top.</li>
-            </ul>
-          </div>
         </div>
       </div>
-
-      {/* Right Panel - Hero Portrait */}
-      <div className="hidden lg:block relative flex-1 overflow-hidden bg-bg-primary animate-hero-zoom-in">
-        {/* Gradient overlay from left to blend with panel */}
-        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-bg-secondary to-transparent z-10" />
-
-        {/* Hero Portrait */}
-        {renderSrc ? (
-          <img
-            src={renderSrc}
-            alt={hero.name}
-            className="absolute inset-0 h-full w-full object-cover object-right"
-            onError={handleRenderError}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
-            {hero.name}
-          </div>
-        )}
-
-        {/* Bottom gradient for depth */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
-      </div>
-      </div>
-      {pickerSkin && (
-        <VariantPickerModal
-          modName={pickerSkin.primary.name}
-          variants={pickerSkin.variants}
-          onToggle={(variant) => setLockerVariantEnabled(variant, !variant.enabled)}
-          onMoveVariant={(variant, direction) => moveLockerVariant(pickerSkin.variants, variant, direction)}
-          onReorderVariantTo={(source, neighbor, position) =>
-            reorderLockerVariantTo(pickerSkin.variants, source, neighbor, position)
-          }
-          onDisableAll={() => disableLockerVariants(pickerSkin.variants)}
-          onDeleteVariant={(variant) => deleteMod(variant.id)}
-          onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
-          onClose={() => setPickerSkinKey(null)}
-        />
-      )}
-    </>
+    </div>
   );
 }
 
@@ -492,7 +450,7 @@ function LockerHeroSkeleton() {
             <Skeleton className="h-3 w-24" />
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-10 w-10" rounded="md" />
+                <Skeleton className="h-20 w-20" rounded="md" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-3 w-3/4" />
                   <Skeleton className="h-2 w-1/3" />

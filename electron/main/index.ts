@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell, session } from 'electron';
 import { join, resolve } from 'path';
+import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import {
     GRIMOIRE_PROTOCOL,
@@ -35,6 +36,25 @@ import { runStartupRecovery } from './ipc/launch';
 
 let mainWindow: BrowserWindow | null = null;
 
+/** Schemes we'll hand to shell.openExternal. Restricted to web/email links
+ *  so a mod description (or any other untrusted content rendered in the
+ *  renderer) can't smuggle in file://, custom protocol handlers, or UNC
+ *  paths that would otherwise be opened by the user's default OS handler. */
+const SAFE_OPEN_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+function openExternalSafe(rawUrl: string): void {
+    try {
+        const u = new URL(rawUrl);
+        if (SAFE_OPEN_SCHEMES.has(u.protocol)) {
+            void shell.openExternal(rawUrl);
+            return;
+        }
+        console.warn('[Main] blocked openExternal for scheme:', u.protocol);
+    } catch {
+        console.warn('[Main] blocked openExternal for malformed URL');
+    }
+}
+
 function createWindow(): void {
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -49,7 +69,7 @@ function createWindow(): void {
             preload: join(__dirname, '../preload/index.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false,
+            sandbox: true,
         },
     });
 
@@ -59,8 +79,35 @@ function createWindow(): void {
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
+        openExternalSafe(details.url);
         return { action: 'deny' };
+    });
+
+    // Catch in-place navigations (bare `<a href="https://...">` clicks in
+    // user content like mod descriptions and comments). Without this, those
+    // links replace the React app with a webpage and the user has no back
+    // button to recover. setWindowOpenHandler only covers target="_blank".
+    // We restrict the allowlist to the renderer's own directory (the dev
+    // server origin or the packaged renderer folder); anything else,
+    // including any other file:// URL a malicious mod description might
+    // smuggle in, ships out to the user's default browser via
+    // shell.openExternal. HashRouter routes change the URL fragment via
+    // history.pushState and don't trigger will-navigate, so the renderer's
+    // own SPA navigation is unaffected by this filter.
+    const rendererSourceUrl = is.dev && process.env['ELECTRON_RENDERER_URL']
+        ? process.env['ELECTRON_RENDERER_URL']
+        : pathToFileURL(join(__dirname, '../renderer/index.html')).href;
+    const rendererBase = (() => {
+        const parsed = new URL(rendererSourceUrl);
+        parsed.search = '';
+        parsed.hash = '';
+        parsed.pathname = parsed.pathname.replace(/[^/]*$/, '');
+        return parsed.href;
+    })();
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (url.startsWith(rendererBase)) return;
+        event.preventDefault();
+        openExternalSafe(url);
     });
 
     // Debug: log renderer errors

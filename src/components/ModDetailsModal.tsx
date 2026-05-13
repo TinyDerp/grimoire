@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import {
   Volume2,
   Loader2,
@@ -33,7 +33,7 @@ interface ModDetailsModalProps {
    *  an "Active" badge so the user can see what is actually loaded. */
   activeFileIds?: Set<number>;
   /** Per-file local install state, keyed by GameBanana file id. When provided
-   *  (Browse only — Installed leaves this undefined), an installed-but-disabled
+   *  (Browse only â€” Installed leaves this undefined), an installed-but-disabled
    *  file row shows an inline "Enable" pill so the user can flip it on without
    *  leaving the Browse tab after downloading. */
   installedFileStates?: Map<number, { modId: string; enabled: boolean }>;
@@ -71,7 +71,7 @@ export default function ModDetailsModal({
 }: ModDetailsModalProps) {
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
-  // Cursor into the images array — only the lightbox cares about this now
+  // Cursor into the images array â€” only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
   // step through while the lightbox is open.
@@ -80,10 +80,14 @@ export default function ModDetailsModal({
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
   const [archivedFilesOpen, setArchivedFilesOpen] = useState(false);
-  // Lightbox state — when true, the selected image renders full-screen at
+  // Lightbox state â€” when true, the selected image renders full-screen at
   // its native GB resolution so the user can inspect detail the inline
   // preview hides.
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Per-image natural aspect ratio, captured on load so each preview slot
+  // can size to its real proportions instead of being forced into 16:9
+  // (which letterboxed portraits and chopped UI screenshots).
+  const [imageRatios, setImageRatios] = useState<Record<number, number>>({});
 
   useEffect(() => {
     setArchivedFilesOpen(false);
@@ -121,7 +125,7 @@ export default function ModDetailsModal({
           onClose();
         }
       }
-      // Arrow keys only navigate while the lightbox is open — otherwise
+      // Arrow keys only navigate while the lightbox is open â€” otherwise
       // they'd silently mutate hidden state while the user scrolls the
       // description with the cursor.
       if (lightboxOpen && images.length > 1) {
@@ -227,7 +231,7 @@ export default function ModDetailsModal({
           )}
           <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
             <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
-            <span className="opacity-50">&bull;</span>
+            <span className="opacity-50">â€¢</span>
             <span>{file.downloadCount.toLocaleString()} downloads</span>
           </div>
           {isDownloadingThis && pct !== null && (
@@ -289,7 +293,7 @@ export default function ModDetailsModal({
         className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header — single row. Status badges, category, title, and dense
+        {/* Header â€” single row. Status badges, category, title, and dense
             metadata cluster all fit on one line so the modal's vertical
             budget goes to content, not chrome. Title shrinks/truncates
             first when space gets tight; metadata hides on narrow screens. */}
@@ -324,7 +328,7 @@ export default function ModDetailsModal({
           </h2>
           {(() => {
             // Hide the modified date when it formats to the same day as the
-            // added date — common for fresh uploads where both timestamps
+            // added date â€” common for fresh uploads where both timestamps
             // fall on the same calendar day, which makes the header read
             // "5/12/2026 5/12/2026".
             const addedStr = dateAdded && dateAdded > 0 ? formatDate(dateAdded) : null;
@@ -363,7 +367,7 @@ export default function ModDetailsModal({
           </button>
         </div>
 
-        {/* Body — single scroll on narrow (everything flows top to bottom),
+        {/* Body â€” single scroll on narrow (everything flows top to bottom),
             two independently-scrollable columns on lg+. Independent scroll
             on wide is critical now that previews stack vertically: scrolling
             comments shouldn't drag the image column away, and vice versa. */}
@@ -371,7 +375,7 @@ export default function ModDetailsModal({
             {/* Image / preview column */}
             <div className="lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pr-3 space-y-3">
               {images.length > 0 ? (
-                /* Vertical preview stack — every image renders inline so
+                /* Vertical preview stack â€” every image renders inline so
                    users scroll naturally to see all of them. Click any one
                    to open the lightbox at that image's index. We use the
                    530px preview here (fast load + sharp on the inline slot)
@@ -379,35 +383,34 @@ export default function ModDetailsModal({
                 <div className="space-y-3" aria-label="Image previews">
                   {images.map((img, index) => {
                     const previewSrc = `${img.baseUrl}/${img.file530 || img.file}`;
+                    const ratio = imageRatios[index];
+                    // Pre-load: hold a 16:9 placeholder so the column doesn't
+                    // jump as images decode. Post-load: snap to the image's
+                    // real aspect ratio so portraits, ultrawides, and UI
+                    // screenshots all render at their natural shape â€” no
+                    // letterboxing, no cropping, no blurred fill needed.
                     return (
                       <button
                         key={`${img.baseUrl}/${img.file}`}
                         type="button"
                         onClick={() => openLightboxAt(index)}
                         aria-label={`View image ${index + 1} of ${images.length} full size`}
-                        className="relative block w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
+                        style={{ aspectRatio: ratio ? String(ratio) : '16 / 9' }}
+                        className="relative block w-full bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
                       >
-                        {/* Letterbox fill — same image scaled to cover the
-                            slot and heavily blurred so non-16:9 previews get
-                            an art-matched backdrop instead of harsh black
-                            bars. Hidden from a11y; the contained image
-                            below carries the real meaning. NSFW path skips
-                            this so the blur+overlay still works as a
-                            single layer. */}
-                        {!(mod.nsfw && hideNsfwPreviews) && (
-                          <img
-                            src={previewSrc}
-                            alt=""
-                            aria-hidden
-                            loading="lazy"
-                            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60 pointer-events-none"
-                          />
-                        )}
                         <img
                           src={previewSrc}
                           alt={`${mod.name} - Image ${index + 1}`}
                           loading="lazy"
-                          className={`relative w-full h-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
+                          onLoad={(e) => {
+                            const el = e.currentTarget;
+                            if (el.naturalWidth > 0 && el.naturalHeight > 0) {
+                              setImageRatios((prev) =>
+                                prev[index] ? prev : { ...prev, [index]: el.naturalWidth / el.naturalHeight }
+                              );
+                            }
+                          }}
+                          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.01] ${
                             mod.nsfw && hideNsfwPreviews ? 'blur-xl scale-110' : ''
                           }`}
                         />
@@ -416,9 +419,6 @@ export default function ModDetailsModal({
                             NSFW preview hidden
                           </div>
                         )}
-                        {/* Per-image index pill + zoom affordance. The
-                            zoom button shows on hover so it doesn't
-                            compete with the image visually at rest. */}
                         {images.length > 1 && (
                           <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
                             {index + 1} / {images.length}
@@ -464,7 +464,7 @@ export default function ModDetailsModal({
               )}
             </div>
 
-            {/* Content column — description / files / comments / GB link.
+            {/* Content column â€” description / files / comments / GB link.
                 Takes the remaining horizontal space on wide layouts.
                 Independently scrollable on lg+ so reading comments or
                 installing a file doesn't move the image stack on the left. */}
@@ -474,7 +474,7 @@ export default function ModDetailsModal({
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
                     About
                   </h3>
-                  <div className="text-sm text-text-secondary [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
+                  <div className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
                   </div>
                 </section>
@@ -517,7 +517,6 @@ export default function ModDetailsModal({
                   </div>
                 </section>
               )}
-
               <section>
                 <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2 flex items-center gap-2">
                   <MessageSquare className="w-3.5 h-3.5" />
@@ -542,7 +541,7 @@ export default function ModDetailsModal({
                 ) : comments.length === 0 ? (
                   <p className="text-sm text-text-secondary py-1">No comments yet</p>
                 ) : (
-                  /* Flat threaded layout — no per-comment card. Files stay
+                  /* Flat threaded layout â€” no per-comment card. Files stay
                      as bordered action cards (each is something you DO);
                      comments are conversational content (something you
                      READ), so we strip the boxes and let the avatar + name
@@ -565,7 +564,7 @@ export default function ModDetailsModal({
                             <span className="text-[11px] text-text-tertiary">{formatDate(comment.dateAdded)}</span>
                           </div>
                           <div
-                            className="text-sm text-text-secondary [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                            className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
                             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comment.text) }}
                           />
                         </div>
@@ -588,7 +587,7 @@ export default function ModDetailsModal({
         </div>
       </div>
 
-      {/* Lightbox overlay — sits above the modal so ESC closes it first.
+      {/* Lightbox overlay â€” sits above the modal so ESC closes it first.
           Click outside the image dismisses; carousel arrows still work via
           the global keydown listener so users can flip pictures while zoomed. */}
       {lightboxOpen && currentImageFullUrl && (
@@ -600,7 +599,7 @@ export default function ModDetailsModal({
           }}
           role="dialog"
           aria-modal="true"
-          aria-label={`${mod.name} — full size image`}
+          aria-label={`${mod.name} â€” full size image`}
         >
           <button
             type="button"

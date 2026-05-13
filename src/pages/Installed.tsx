@@ -31,6 +31,7 @@ import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import VariantPickerModal from '../components/VariantPickerModal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -613,7 +614,7 @@ export default function Installed() {
     );
   }
 
-  // Group files sharing a GB mod id under a single card. Singletons and
+  // Group variants sharing a GB mod id under a single card. Singletons and
   // custom imports (no GB id) keep their old card behavior.
   const allEntries = buildModEntries(mods);
   const enabledEntries = allEntries
@@ -623,7 +624,6 @@ export default function Installed() {
     .filter((e) => !isEntryEnabled(e))
     .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
   const compactOrder = buildCompactPriorityOrder(allEntries);
-  const needsPriorityCompact = compactOrder.some((m, i) => m.priority !== i + 1);
   const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
@@ -684,9 +684,7 @@ export default function Installed() {
     reorderMods(next.map((m) => m.fileName));
   };
 
-  const compactPriorities = () => {
-    // Renumber every installed file sequentially. Mixed groups are split by
-    // enabled state so disabled files don't reserve holes in the enabled run.
+  const fixOrder = () => {
     if (compactOrder.length === 0) return;
     reorderMods(compactOrder.map((m) => m.fileName));
   };
@@ -778,6 +776,10 @@ export default function Installed() {
           enabled: entry.enabledVariants.length > 0,
           // Card meta shows total size across the grouped files.
           size: entry.totalSize,
+          installedAt: entry.variants.reduce(
+            (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
+            entry.primary.installedAt
+          ),
         }}
         viewMode={viewMode}
         hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
@@ -958,7 +960,7 @@ export default function Installed() {
           <p className="mb-2">No installed mods match &ldquo;{search}&rdquo;</p>
           <button
             onClick={() => setSearch('')}
-            className="mt-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
+            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             Clear search
           </button>
@@ -969,14 +971,14 @@ export default function Installed() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <SectionHeader count={visibleEnabled.length} className="!mb-0">Enabled</SectionHeader>
-            {needsPriorityCompact && !searchNeedle && (
+            {!searchNeedle && (
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={compactPriorities}
-                title="Renumber installed files and keep enabled files from the same mod together"
+                onClick={fixOrder}
+                title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
               >
-                Compact priorities
+                Fix Order
               </Button>
             )}
           </div>
@@ -1248,6 +1250,7 @@ interface ModCardProps {
     enabled: boolean;
     priority: number;
     size: number;
+    installedAt: string;
     thumbnailUrl?: string;
     audioUrl?: string;
     sourceSection?: string;
@@ -1629,14 +1632,24 @@ function ModCard({
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
             <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-            {!group ? (
+            <span
+              className="flex-shrink-0 tabular-nums"
+              title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
+            >
+              {formatRelativeDate(mod.installedAt)}
+            </span>
+            {group ? (
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium" title="Click the card to pick a variant">
+                {group.variantCount} variants
+              </span>
+            ) : (
               <span
                 className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
                 title={mod.fileName}
               >
                 {mod.fileName}
               </span>
-            ) : null}
+            )}
           </div>
           {hasListTags && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 min-w-0">
@@ -2016,7 +2029,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover text-black rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Import

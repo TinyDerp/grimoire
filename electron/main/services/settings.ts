@@ -19,6 +19,10 @@ export interface AppSettings {
      *  stable per-mod identities (GameBanana mod/file ids when available)
      *  joined sorted with `::`; older local-id pairs are still recognized. */
     ignoredConflicts: string[];
+    /** When true, the conflict detector returns an empty list — every detected
+     *  pair is hidden without persisting it to ignoredConflicts, so toggling
+     *  back off restores the original conflict view. */
+    ignoreConflictsByDefault: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalCrosshair: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
+    ignoreConflictsByDefault: false,
 };
 
 /**
