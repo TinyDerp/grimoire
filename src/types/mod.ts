@@ -61,4 +61,6 @@ export interface AppSettings {
   hasCompletedSetup: boolean;
   ignoredConflicts: string[];
   ignoreConflictsByDefault: boolean;
+  /** UI accent color (hex, e.g. "#f97316"). Falls back to default orange when unset. */
+  accentColor: string;
 }

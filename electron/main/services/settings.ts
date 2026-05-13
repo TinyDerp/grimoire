@@ -23,6 +23,9 @@ export interface AppSettings {
      *  pair is hidden without persisting it to ignoredConflicts, so toggling
      *  back off restores the original conflict view. */
     ignoreConflictsByDefault: boolean;
+    /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
+     *  focus rings throughout the app. */
+    accentColor: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -40,6 +43,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
+    accentColor: '#f97316',
 };
 
 /**

@@ -400,7 +400,7 @@ export default function Sidebar() {
           onClick={toggleCollapsed}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-[right,color,background-color] duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+          className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-[right,color,background-color] duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             collapsed ? 'right-[18px]' : 'right-2'
           }`}
         >
@@ -416,7 +416,7 @@ export default function Sidebar() {
                 to={to}
                 title={collapsed ? `${label}: ${tooltip}` : tooltip}
                 className={({ isActive }) =>
-                  `group relative flex items-center h-10 overflow-hidden leading-5 rounded-md text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
+                  `group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
                     collapsed ? '' : 'pr-3'
                   } ${
                     isActive
@@ -446,12 +446,12 @@ export default function Sidebar() {
                         badgeTone === 'warning' ? (
                           <span
                             aria-hidden
-                            className="absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-bg-secondary bg-state-warning"
+                            className="absolute top-1 right-1 w-2 h-2 rounded-sm ring-2 ring-bg-secondary bg-state-warning"
                           />
                         ) : null
                       ) : (
                         <span
-                          className={`inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums leading-none transition-opacity duration-150 ${
+                          className={`inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-sm px-1 text-[11px] font-semibold tabular-nums leading-none transition-opacity duration-150 ${
                             labelsVisible ? 'opacity-100' : 'opacity-0'
                           } ${
                             badgeTone === 'warning'
@@ -478,7 +478,7 @@ export default function Sidebar() {
               onClick={handleRestoreNow}
               disabled={restorePending}
               title={`Vanilla session active. ${stashStatus.modCount ?? 0} mod${stashStatus.modCount === 1 ? '' : 's'} stashed. Click to restore now.`}
-              className="w-full flex items-center justify-center h-10 rounded-md border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              className="w-full flex items-center justify-center h-10 rounded-sm border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -487,7 +487,7 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
+            <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 leading-tight">
                 Vanilla: {stashStatus.modCount ?? 0} stashed
@@ -496,7 +496,7 @@ export default function Sidebar() {
                 onClick={handleRestoreNow}
                 disabled={restorePending}
                 title="Restore stashed mods now"
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
               >
                 {restorePending ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -512,7 +512,7 @@ export default function Sidebar() {
         {/* Toasts need horizontal room to read, so suppress in collapsed mode. */}
         {toast && labelMounted && (
           <div
-            className={`rounded-md px-2.5 py-1.5 text-xs leading-snug ${
+            className={`rounded-sm px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'
                 ? 'border border-red-500/40 bg-red-500/10 text-red-300'
                 : 'border border-accent/40 bg-accent/10 text-accent'
@@ -550,7 +550,7 @@ export default function Sidebar() {
               onClick={handleStopGame}
               disabled={stopPending || !!launchPending}
               title="Stop the running Deadlock process"
-              className={`flex w-full items-center overflow-hidden rounded-lg bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`flex w-full items-center overflow-hidden rounded-sm bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 collapsed ? 'h-10' : 'h-11'
               }`}
             >
@@ -579,7 +579,7 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className="flex w-full h-10 items-center overflow-hidden rounded-md bg-accent/10 text-text-primary ring-1 ring-accent/40 hover:bg-accent/20 hover:ring-accent/60 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full h-10 items-center overflow-hidden rounded-sm bg-accent/10 text-text-primary ring-1 ring-accent/40 hover:bg-accent/20 hover:ring-accent/60 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className={actionIconClass}>
               {launchPending === 'modded' ? (
@@ -605,7 +605,7 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active. Restore mods first.'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className="flex w-full h-10 items-center overflow-hidden rounded-md text-text-secondary ring-1 ring-transparent hover:bg-accent/5 hover:text-text-primary hover:ring-accent/25 text-sm font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex w-full h-10 items-center overflow-hidden rounded-sm text-text-secondary ring-1 ring-transparent hover:bg-accent/5 hover:text-text-primary hover:ring-accent/25 text-sm font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <span className={actionIconClass}>
               {launchPending === 'vanilla' ? (
@@ -629,7 +629,7 @@ export default function Sidebar() {
             if (updateAvailable) setUpdateModalOpen(true);
             else navigate('/settings');
           }}
-          className={`flex w-full items-center rounded-md text-xs text-text-secondary cursor-pointer hover:text-accent hover:bg-bg-tertiary transition-[color,background-color,padding,height,opacity] duration-200 ${
+          className={`flex w-full items-center rounded-sm text-xs text-text-secondary cursor-pointer hover:text-accent hover:bg-bg-tertiary transition-[color,background-color,padding,height,opacity] duration-200 ${
             isFullyCollapsed
               ? updateAvailable
                 ? 'h-7 justify-center px-0 opacity-100'
