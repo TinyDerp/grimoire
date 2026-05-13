@@ -12,7 +12,6 @@ import {
   ImagePlus,
   Search,
   Volume2,
-  Info,
   Download,
   UploadCloud,
   List,
@@ -856,9 +855,9 @@ export default function Installed() {
             <ViewModeToggle
               value={viewMode}
               options={[
-                { value: 'list', label: 'List', icon: List },
-                { value: 'grid', label: 'Cards', icon: LayoutGrid },
-                { value: 'compact', label: 'Compact', icon: Grid3x3 },
+                { value: 'grid', label: 'Cards view', icon: LayoutGrid },
+                { value: 'compact', label: 'Compact view', icon: Grid3x3 },
+                { value: 'list', label: 'List view', icon: List },
               ]}
               onChange={setViewMode}
             />
@@ -1230,6 +1229,14 @@ function ModCard({
       ? `1/${group.variantCount} enabled: ${enabledTitle} - click card to choose files`
       : `${group.enabledCount}/${group.variantCount} enabled${enabledTitle ? `: ${enabledTitle}` : ''} - click card to choose files`
     : '';
+  const listHeroName = viewMode === 'list' && mod.sourceSection === 'Sound'
+    ? inferHeroFromTitle(mod.name)
+    : null;
+  const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
+  const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
+  const hasListTags =
+    viewMode === 'list' &&
+    (hasConflicts || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled || !!group);
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -1252,7 +1259,7 @@ function ModCard({
           : mod.enabled
             ? 'bg-accent/5 border-accent/40'
             : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
-      } ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
+      } ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
         isDragging ? 'opacity-40' : ''
       }`}
       draggable={draggable}
@@ -1471,52 +1478,62 @@ function ModCard({
           </div>
         )}
 
+        {viewMode === 'list' && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails?.();
+            }}
+            disabled={!onOpenDetails}
+            className="group relative w-24 h-16 sm:w-32 sm:h-20 flex-shrink-0 rounded-md overflow-hidden bg-bg-tertiary border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+            title={onOpenDetails ? (isGroupCard ? 'Choose files' : 'View mod details') : undefined}
+            aria-label={onOpenDetails ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
+          >
+            {listHeroRenderUrl ? (
+              <img
+                src={listHeroRenderUrl}
+                alt={listHeroName ?? mod.name}
+                className="w-full h-full object-cover transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                style={{ objectPosition: `${listHeroFacePos}% 25%` }}
+              />
+            ) : (
+              <ModThumbnail
+                src={mod.thumbnailUrl}
+                alt={mod.name}
+                nsfw={mod.nsfw}
+                hideNsfw={hideNsfwPreviews}
+                className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+              />
+            )}
+            {onOpenDetails && (
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
+            )}
+          </button>
+        )}
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <h3 className="font-medium truncate flex-1 min-w-0" title={mod.name}>{mod.name}</h3>
-            {hasConflicts && viewMode === 'list' && (
-              <Tag tone="warning" icon={AlertTriangle} className="flex-shrink-0">
-                Conflict
-              </Tag>
-            )}
-            {mod.sourceSection === 'Sound' && (
-              <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
-                Sound
-              </Tag>
-            )}
-            {mod.nsfw && (
-              <Tag tone="danger" className="flex-shrink-0">18+</Tag>
-            )}
-            {updateAvailable && viewMode === 'list' && (
-              <Tag
-                tone="info"
-                icon={Download}
-                title="A newer version is available on GameBanana"
-                className="flex-shrink-0"
-              >
-                Update
-              </Tag>
-            )}
-            {mod.enabled && viewMode === 'list' && (
-              <Tag
-                tone="accent"
-                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-                className="flex-shrink-0 tabular-nums"
-              >
-                Load #{mod.priority}
-              </Tag>
-            )}
-          </div>
+          {viewMode === 'list' ? (
+            <h3 className="font-medium truncate min-w-0" title={mod.name}>{mod.name}</h3>
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <h3 className="font-medium truncate flex-1 min-w-0" title={mod.name}>{mod.name}</h3>
+              {mod.sourceSection === 'Sound' && (
+                <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
+                  Sound
+                </Tag>
+              )}
+              {mod.nsfw && (
+                <Tag tone="danger" className="flex-shrink-0">18+</Tag>
+              )}
+            </div>
+          )}
           <div className="flex flex-nowrap items-center gap-2 text-xs text-text-secondary mt-1 min-w-0 overflow-hidden">
             {mod.categoryName && (
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
             <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-            {group && viewMode === 'list' ? (
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium truncate max-w-48" title={enabledBadgeTitle}>
-                {enabledBadgeLabel}
-              </span>
-            ) : !group ? (
+            {!group ? (
               <span
                 className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
                 title={mod.fileName}
@@ -1525,6 +1542,52 @@ function ModCard({
               </span>
             ) : null}
           </div>
+          {hasListTags && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 min-w-0">
+              {hasConflicts && (
+                <Tag tone="warning" icon={AlertTriangle} className="flex-shrink-0">
+                  Conflict
+                </Tag>
+              )}
+              {mod.sourceSection === 'Sound' && (
+                <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
+                  Sound
+                </Tag>
+              )}
+              {mod.nsfw && (
+                <Tag tone="danger" className="flex-shrink-0">18+</Tag>
+              )}
+              {updateAvailable && (
+                <Tag
+                  tone="info"
+                  icon={Download}
+                  title="A newer version is available on GameBanana"
+                  className="flex-shrink-0"
+                >
+                  Update
+                </Tag>
+              )}
+              {mod.enabled && (
+                <Tag
+                  tone="accent"
+                  title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+                  className="flex-shrink-0 tabular-nums"
+                >
+                  Load #{mod.priority}
+                </Tag>
+              )}
+              {group && enabledBadgeLabel && (
+                <Tag
+                  tone={group.enabledCount > 0 ? 'info' : 'neutral'}
+                  icon={Layers}
+                  title={enabledBadgeTitle}
+                  className="max-w-full"
+                >
+                  <span className="truncate">{enabledBadgeLabel}</span>
+                </Tag>
+              )}
+            </div>
+          )}
         </div>
 
         {/* List-mode: audio preview sits between meta and delete, using the
@@ -1543,20 +1606,13 @@ function ModCard({
           </div>
         )}
 
-        <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
-          {onOpenDetails && viewMode === 'list' && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDetails();
-              }}
-              className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
-              title={isGroupCard ? 'Choose files' : 'View mod details'}
-              aria-label={isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`}
-            >
-              <Info className="w-4 h-4" />
-            </button>
-          )}
+        <div
+          className={`flex flex-shrink-0 ${
+            viewMode === 'list'
+              ? 'flex-row items-center gap-2 self-center'
+              : 'flex-col items-center gap-1.5'
+          }`}
+        >
           <button
             onClick={onDelete}
             className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"

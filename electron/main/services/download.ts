@@ -462,9 +462,8 @@ async function executeDownload(
     // Persist that header so the variant picker can show meaningful names by
     // default — much friendlier than raw VPK filenames. Trim because the
     // upstream field occasionally has surrounding whitespace.
-    const fileDescription = details.files
-        ?.find((f) => f.id === fileId)
-        ?.description?.trim();
+    const selectedFile = details.files?.find((f) => f.id === fileId);
+    const fileDescription = selectedFile?.description?.trim();
     // Many mod authors leave file descriptions blank, so also capture the
     // GB filename stem (e.g. "galaxy_rem_gold.zip" → "galaxy_rem_gold").
     // This becomes the picker's second-line fallback so variants get a
@@ -481,6 +480,7 @@ async function executeDownload(
         audioUrl: details.previewMedia?.metadata?.audioUrl,  // Persist for Sound mod preview
         sourceSection: section,
         nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
+        isArchived: selectedFile?.isArchived ?? false,
         fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
         sourceFileName: sourceFileNameStem.length > 0 ? sourceFileNameStem : undefined,
     };
@@ -898,9 +898,8 @@ async function executeOneClickDownload(
     // Same trick as the regular download path: capture the author's per-file
     // header so the variant picker has a sane default label. Only available
     // when GB enrichment succeeded and the file id is recognised in the list.
-    const oneClickFileDescription = enriched?.files
-        ?.find((f) => f.id === fileId)
-        ?.description?.trim();
+    const oneClickFile = enriched?.files?.find((f) => f.id === fileId);
+    const oneClickFileDescription = oneClickFile?.description?.trim();
     const oneClickSourceFileName = stripArchiveExtension(fileName);
     const metadata = {
         modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
@@ -911,6 +910,7 @@ async function executeOneClickDownload(
         audioUrl: enriched?.previewMedia?.metadata?.audioUrl,
         sourceSection: section,
         nsfw: enriched?.nsfw,
+        isArchived: oneClickFile?.isArchived ?? false,
         fileDescription:
             oneClickFileDescription && oneClickFileDescription.length > 0
                 ? oneClickFileDescription

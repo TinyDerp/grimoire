@@ -93,6 +93,16 @@ export interface VanillaRestoreResult {
     failed: string[];
 }
 
+export interface GameRunningStatus {
+    running: boolean;
+}
+
+export interface StopGameResult {
+    wasRunning: boolean;
+    stopped: boolean;
+    restoreResult?: VanillaRestoreResult;
+}
+
 export interface DownloadProgressData {
     modId: number;
     fileId: number;
@@ -269,6 +279,8 @@ export interface ElectronAPI {
     // Launch
     launchModded: () => Promise<void>;
     launchVanilla: () => Promise<void>;
+    getGameRunningStatus: () => Promise<GameRunningStatus>;
+    stopGame: () => Promise<StopGameResult>;
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
@@ -484,6 +496,9 @@ export interface ModConflict {
     modAName: string;
     modB: string;
     modBName: string;
+    modAIdentity: string;
+    modBIdentity: string;
+    ignoreKey: string;
     conflictType: 'priority' | 'file';
     details: string;
 }

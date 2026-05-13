@@ -10,6 +10,7 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import ModThumbnail from '../components/ModThumbnail';
+import VariantPickerModal from '../components/VariantPickerModal';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
@@ -31,13 +32,14 @@ import {
   isLockerManagedMod,
   parseMinaVariant,
   type HeroCategory,
+  type LockerSkin,
   type MinaPreset,
   type MinaSelection,
   type MinaVariant,
 } from '../lib/lockerUtils';
 
 export default function Locker() {
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod, reorderMods, setVariantLabel } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
@@ -51,6 +53,7 @@ export default function Locker() {
   const [selectedHero, setSelectedHero] = useState<HeroCategory | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [cardRect, setCardRect] = useState<DOMRect | null>(null);
+  const closeOverlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
@@ -68,6 +71,7 @@ export default function Locker() {
     garter: 'Default',
     dress: 'Default',
   });
+  const [pickerSkinKey, setPickerSkinKey] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -134,6 +138,10 @@ export default function Locker() {
 
   // Open hero overlay
   const openHeroOverlay = useCallback((hero: HeroCategory, rect: DOMRect) => {
+    if (closeOverlayTimeoutRef.current) {
+      clearTimeout(closeOverlayTimeoutRef.current);
+      closeOverlayTimeoutRef.current = null;
+    }
     setSelectedHero(hero);
     setActiveHeroId(hero.id);
     setCardRect(rect);
@@ -148,24 +156,36 @@ export default function Locker() {
   // Close hero overlay
   const closeHeroOverlay = useCallback(() => {
     setOverlayVisible(false);
+    if (closeOverlayTimeoutRef.current) {
+      clearTimeout(closeOverlayTimeoutRef.current);
+    }
     // Unmount after fade completes (600ms + small buffer)
-    setTimeout(() => {
+    closeOverlayTimeoutRef.current = setTimeout(() => {
       setSelectedHero(null);
       setActiveHeroId(null);
       setCardRect(null);
+      closeOverlayTimeoutRef.current = null;
     }, 700);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeOverlayTimeoutRef.current) {
+        clearTimeout(closeOverlayTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Escape key to close overlay
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedHero) {
+      if (e.key === 'Escape' && selectedHero && !pickerSkinKey) {
         closeHeroOverlay();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedHero, closeHeroOverlay]);
+  }, [selectedHero, closeHeroOverlay, pickerSkinKey]);
 
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
@@ -178,6 +198,16 @@ export default function Locker() {
   }, [lockerMods, baseHeroList]);
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
+  const pickerSkin = useMemo(() => {
+    if (!pickerSkinKey) return null;
+    return groupLockerSkins(lockerMods).find((skin) => skin.key === pickerSkinKey) ?? null;
+  }, [lockerMods, pickerSkinKey]);
+
+  useEffect(() => {
+    if (pickerSkinKey && !pickerSkin) {
+      setPickerSkinKey(null);
+    }
+  }, [pickerSkinKey, pickerSkin]);
 
   // Sorted hero list for display
   const heroList = useMemo(() => {
@@ -202,6 +232,37 @@ export default function Locker() {
     () => findMinaVariant(minaVariants, minaSelection),
     [minaVariants, minaSelection]
   );
+
+  const findFreshLockerTargetScope = (targetId: string) => {
+    const freshLockerMods = useAppStore.getState().mods.filter(isLockerManagedMod);
+    const freshHeroMods = groupModsByCategory(freshLockerMods, baseHeroList);
+    for (const list of freshHeroMods.map.values()) {
+      const target = list.find((mod) => mod.id === targetId);
+      if (target) return { target, scope: list };
+    }
+    const unassignedTarget = freshHeroMods.unassigned.find((mod) => mod.id === targetId);
+    if (unassignedTarget) {
+      return { target: unassignedTarget, scope: freshHeroMods.unassigned };
+    }
+    const fallbackTarget = freshLockerMods.find((mod) => mod.id === targetId);
+    return fallbackTarget ? { target: fallbackTarget, scope: freshLockerMods } : null;
+  };
+
+  const setLockerVariantEnabled = async (target: Mod, enabled: boolean) => {
+    const fresh = findFreshLockerTargetScope(target.id);
+    if (!fresh) return;
+    const targetSkinKey = getLockerSkinKey(fresh.target);
+    if (enabled) {
+      for (const mod of fresh.scope) {
+        if (getLockerSkinKey(mod) !== targetSkinKey && mod.enabled) {
+          await toggleMod(mod.id);
+        }
+      }
+    }
+    if (fresh.target.enabled !== enabled) {
+      await toggleMod(fresh.target.id);
+    }
+  };
 
   const setActiveSkin = async (heroId: number, modId: string) => {
     const list = heroMods.map.get(heroId) ?? [];
@@ -375,6 +436,7 @@ export default function Locker() {
               hero={hero}
               mods={heroMods.map.get(hero.id) ?? []}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
+              onOpenVariantPicker={(skin) => setPickerSkinKey(skin.key)}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
@@ -412,9 +474,18 @@ export default function Locker() {
               const subtitle = skin.variants.length > 1 ? `${skin.variants.length} files` : mod.fileName;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={skin.key}
-                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3"
+                  onClick={() => {
+                    if (skin.variants.length > 1) {
+                      setPickerSkinKey(skin.key);
+                    }
+                  }}
+                  className={`bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left ${
+                    skin.variants.length > 1 ? 'cursor-pointer hover:border-accent/60 transition-colors' : 'cursor-default'
+                  }`}
+                  title={skin.variants.length > 1 ? 'Choose files' : undefined}
                 >
                   <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary">
                     <ModThumbnail
@@ -434,7 +505,7 @@ export default function Locker() {
                     <div className="font-medium truncate">{mod.name}</div>
                     <div className="text-xs text-text-secondary truncate">{subtitle}</div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -450,6 +521,7 @@ export default function Locker() {
           cardRect={cardRect}
           mods={heroMods.map.get(selectedHero.id) ?? []}
           onSelectSkin={(modId) => setActiveSkin(selectedHero.id, modId)}
+          onOpenVariantPicker={(skin) => setPickerSkinKey(skin.key)}
           isFavorite={favoriteHeroes.includes(selectedHero.id)}
           onToggleFavorite={() =>
             setFavoriteHeroes((prev) =>
@@ -476,6 +548,18 @@ export default function Locker() {
           onApplyMinaVariant={selectedHero.name === 'Mina' ? applyMinaVariantSelection : undefined}
         />
       )}
+
+      {pickerSkin && (
+        <VariantPickerModal
+          modName={pickerSkin.primary.name}
+          variants={pickerSkin.variants}
+          onSetVariantEnabled={setLockerVariantEnabled}
+          onReorderVariants={(orderedFileNames) => reorderMods(orderedFileNames)}
+          onDeleteVariant={(variant) => deleteMod(variant.id)}
+          onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
+          onClose={() => setPickerSkinKey(null)}
+        />
+      )}
     </div>
   );
 }
@@ -487,6 +571,7 @@ interface HeroOverlayProps {
   cardRect: DOMRect | null;
   mods: Mod[];
   onSelectSkin: (modId: string) => void;
+  onOpenVariantPicker: (skin: LockerSkin) => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
@@ -514,6 +599,7 @@ function HeroOverlay({
   cardRect: _cardRect,
   mods,
   onSelectSkin,
+  onOpenVariantPicker,
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
@@ -696,6 +782,7 @@ function HeroOverlay({
           <HeroSkinsPanel
             mods={mods}
             onSelect={onSelectSkin}
+            onOpenVariantPicker={onOpenVariantPicker}
             hideNsfwPreviews={hideNsfwPreviews}
             categoryId={hero.id}
             onRefreshMods={onRefreshMods}
@@ -730,6 +817,7 @@ interface HeroCardProps {
   hero: HeroCategory;
   mods: Mod[];
   onSelect: (modId: string) => void;
+  onOpenVariantPicker: (skin: LockerSkin) => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
@@ -930,6 +1018,7 @@ function HeroCard({
   hero,
   mods,
   onSelect,
+  onOpenVariantPicker,
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
@@ -1000,6 +1089,7 @@ function HeroCard({
         <HeroSkinsPanel
           mods={mods}
           onSelect={onSelect}
+          onOpenVariantPicker={onOpenVariantPicker}
           hideNsfwPreviews={hideNsfwPreviews}
           minaPresets={minaPresets}
           activeMinaPreset={activeMinaPreset}

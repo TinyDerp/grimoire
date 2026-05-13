@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Mod } from '../../types/mod';
-import { groupLockerSkins, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
+import { groupLockerSkins, type LockerSkin, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { Skeleton } from '../common/Skeleton';
@@ -8,6 +8,7 @@ import { Skeleton } from '../common/Skeleton';
 interface HeroSkinsPanelProps {
   mods: Mod[];
   onSelect: (modId: string) => void;
+  onOpenVariantPicker?: (skin: LockerSkin) => void;
   hideNsfwPreviews?: boolean;
   categoryId?: number;
   onRefreshMods?: () => void;
@@ -30,6 +31,7 @@ interface HeroSkinsPanelProps {
 export default function HeroSkinsPanel({
   mods,
   onSelect,
+  onOpenVariantPicker,
   hideNsfwPreviews = false,
   categoryId,
   onRefreshMods,
@@ -339,14 +341,21 @@ export default function HeroSkinsPanel({
           const subtitle = hasVariants
             ? `${skin.variants.length} files${enabledSuffix}`
             : mod.fileName;
+          const opensPicker = hasVariants && Boolean(onOpenVariantPicker);
 
           return (
             <button
               key={skin.key}
-              onClick={() => onSelect(mod.id)}
+              onClick={() => {
+                if (opensPicker) {
+                  onOpenVariantPicker?.(skin);
+                } else {
+                  onSelect(mod.id);
+                }
+              }}
               className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors cursor-pointer ${active ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
                 }`}
-              title={active ? 'Active skin' : 'Set active'}
+              title={opensPicker ? 'Choose files' : active ? 'Active skin' : 'Set active'}
             >
               <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
                 <ModThumbnail

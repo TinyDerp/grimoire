@@ -18,8 +18,12 @@ interface ModWithThumbnail {
   id: string;
   name: string;
   fileName: string;
+  identity: string;
+  size?: number;
+  installedAt?: string;
   thumbnailUrl?: string;
   gameBananaId?: number;
+  gameBananaFileId?: number;
   hasSiblingVariants?: boolean;
   variantLabel?: string;
   fileDescription?: string;
@@ -34,6 +38,31 @@ function getVariantLabel(mod: ModWithThumbnail): string | null {
     mod.sourceFileName?.trim() ||
     null
   );
+}
+
+function normalizeIdentityPart(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getModConflictIdentity(mod: Mod): string {
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    if (typeof mod.gameBananaFileId === 'number' && mod.gameBananaFileId > 0) {
+      return `gb:${mod.gameBananaId}:file:${mod.gameBananaFileId}`;
+    }
+    if (mod.sourceFileName) {
+      return `gb:${mod.gameBananaId}:source:${normalizeIdentityPart(mod.sourceFileName)}`;
+    }
+    return `gb:${mod.gameBananaId}:mod`;
+  }
+
+  const installedStamp = Number.isFinite(Date.parse(mod.installedAt))
+    ? String(Date.parse(mod.installedAt))
+    : normalizeIdentityPart(mod.installedAt);
+  return `local:${mod.size}:${installedStamp}`;
+}
+
+function getConflictIgnoreKey(conflict: ModConflict): string {
+  return conflict.ignoreKey ?? conflictPairKey(conflict.modA, conflict.modB);
 }
 
 function ConflictsSkeleton() {
@@ -71,9 +100,9 @@ function ConflictsSkeleton() {
 export default function Conflicts() {
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
-  // Set of ignored pair keys ("idA::idB" sorted). Used both to filter
-  // detected conflicts (defense-in-depth — backend already filters) and to
-  // render the "Ignored" panel.
+  // Set of ignored pair keys ("identityA::identityB" sorted). Used both to
+  // filter detected conflicts (defense-in-depth — backend already filters)
+  // and to render the "Ignored" panel.
   const [ignored, setIgnored] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,17 +135,23 @@ export default function Conflicts() {
           typeof mod.gameBananaId === 'number' &&
           mod.gameBananaId > 0 &&
           (gameBananaCounts.get(mod.gameBananaId) ?? 0) > 1;
-        map.set(mod.id, {
+        const info: ModWithThumbnail = {
           id: mod.id,
           name: mod.name,
           fileName: mod.fileName,
+          identity: getModConflictIdentity(mod),
+          size: mod.size,
+          installedAt: mod.installedAt,
           thumbnailUrl: mod.thumbnailUrl,
           gameBananaId: mod.gameBananaId,
+          gameBananaFileId: mod.gameBananaFileId,
           hasSiblingVariants,
           variantLabel: mod.variantLabel,
           fileDescription: mod.fileDescription,
           sourceFileName: mod.sourceFileName,
-        });
+        };
+        map.set(mod.id, info);
+        map.set(info.identity, info);
       }
       setModsMap(map);
       setConflicts(conflictResult);
@@ -128,16 +163,16 @@ export default function Conflicts() {
     }
   };
 
-  const handleIgnore = async (modA: string, modB: string) => {
-    const key = conflictPairKey(modA, modB);
+  const handleIgnore = async (conflict: ModConflict) => {
+    const key = getConflictIgnoreKey(conflict);
     setPendingPair(key);
     try {
-      const next = await ignoreConflict(modA, modB);
+      const next = await ignoreConflict(conflict.modA, conflict.modB);
       setIgnored(new Set(next));
       // Backend filters ignored pairs from get-conflicts, so dropping locally
       // keeps the UI consistent without a second round-trip.
       setConflicts((prev) =>
-        prev.filter((c) => conflictPairKey(c.modA, c.modB) !== key)
+        prev.filter((c) => getConflictIgnoreKey(c) !== key)
       );
     } catch (err) {
       setError(String(err));
@@ -183,7 +218,7 @@ export default function Conflicts() {
   };
 
   const getModInfo = (modId: string, fallbackName: string): ModWithThumbnail => {
-    return modsMap.get(modId) || { id: modId, name: fallbackName, fileName: '' };
+    return modsMap.get(modId) || { id: modId, name: fallbackName, fileName: '', identity: modId };
   };
 
   if (loading) {
@@ -268,8 +303,8 @@ export default function Conflicts() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleIgnore(conflict.modA, conflict.modB)}
-                  disabled={pendingPair === conflictPairKey(conflict.modA, conflict.modB)}
+                  onClick={() => handleIgnore(conflict)}
+                  disabled={pendingPair === getConflictIgnoreKey(conflict)}
                   title="Stop flagging this pair as a conflict"
                   className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >

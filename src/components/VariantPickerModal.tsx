@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Check, Trash2, Power, PowerOff, Info, Pencil, Loader2, GripVertical, AlertTriangle } from 'lucide-react';
 import type { Mod } from '../types/mod';
-import { Button, Tag } from './common/ui';
+import { ArchivedTag, Button, Tag } from './common/ui';
 
 type DropPosition = 'before' | 'after';
 
@@ -348,6 +348,7 @@ export default function VariantPickerModal({
                                                             Enabled
                                                         </span>
                                                     )}
+                                                    {v.isArchived && <ArchivedTag />}
                                                     {conflictDetails.length > 0 && (
                                                         <Tag
                                                             tone="warning"

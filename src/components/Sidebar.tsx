@@ -12,16 +12,19 @@ import {
   BarChart3,
   Download,
   Play,
+  Square,
   RotateCcw,
   Loader2,
 } from 'lucide-react';
 import {
   getConflicts,
+  getGameRunningStatus,
   getVanillaStashStatus,
   launchModded,
   launchVanilla,
   onVanillaRestoreComplete,
   restoreVanillaStash,
+  stopGame,
   type VanillaStashStatus,
   type VanillaRestoreResult,
 } from '../lib/api';
@@ -42,6 +45,8 @@ export default function Sidebar() {
 
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
+  const [gameRunning, setGameRunning] = useState(false);
+  const [stopPending, setStopPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
   // Toasts can carry an optional action button — used for "Enable" after a
   // fresh download and "Re-enable" after a sibling auto-disable. The action
@@ -58,6 +63,14 @@ export default function Sidebar() {
       setStashStatus(await getVanillaStashStatus());
     } catch {
       setStashStatus({ active: false });
+    }
+  }, []);
+
+  const refreshGameStatus = useCallback(async () => {
+    try {
+      setGameRunning((await getGameRunningStatus()).running);
+    } catch {
+      setGameRunning(false);
     }
   }, []);
 
@@ -100,6 +113,13 @@ export default function Sidebar() {
     const interval = setInterval(refreshStashStatus, 5000);
     return () => clearInterval(interval);
   }, [refreshStashStatus]);
+
+  useEffect(() => {
+    refreshGameStatus();
+    // Mirrors the real Deadlock process, including game exits outside Grimoire.
+    const interval = setInterval(refreshGameStatus, 3000);
+    return () => clearInterval(interval);
+  }, [refreshGameStatus]);
 
   useEffect(() => {
     const unsub = onVanillaRestoreComplete((result: VanillaRestoreResult) => {
@@ -182,7 +202,7 @@ export default function Sidebar() {
   }, [settings?.experimentalStats, settings?.experimentalCrosshair, conflictCount, installedCount]);
 
   const handleLaunchModded = async () => {
-    if (launchPending) return;
+    if (launchPending || stopPending) return;
     setLaunchPending('modded');
     setToast(null);
     try {
@@ -196,11 +216,12 @@ export default function Sidebar() {
     } finally {
       setLaunchPending(null);
       refreshStashStatus();
+      refreshGameStatus();
     }
   };
 
   const handleLaunchVanilla = async () => {
-    if (launchPending) return;
+    if (launchPending || stopPending) return;
     setLaunchPending('vanilla');
     setToast(null);
     try {
@@ -211,6 +232,41 @@ export default function Sidebar() {
       setToast({ kind: 'error', text: String(err).replace(/^Error:\s*/, '') });
     } finally {
       setLaunchPending(null);
+      refreshGameStatus();
+    }
+  };
+
+  const handleStopGame = async () => {
+    if (stopPending) return;
+    setStopPending(true);
+    setToast(null);
+    try {
+      const result = await stopGame();
+      const restoreResult = result.restoreResult;
+      if (restoreResult?.failed.length) {
+        setToast({
+          kind: 'error',
+          text: `Stopped Deadlock, but couldn't restore ${restoreResult.failed.length} mod${restoreResult.failed.length === 1 ? '' : 's'}.`,
+        });
+      } else {
+        const restored = restoreResult?.restored ?? 0;
+        const restoreText = restored > 0
+          ? ` Restored ${restored} stashed mod${restored === 1 ? '' : 's'}.`
+          : '';
+        setToast({
+          kind: 'info',
+          text: result.wasRunning ? `Stopped Deadlock.${restoreText}` : `Deadlock was not running.${restoreText}`,
+        });
+      }
+      if (restoreResult) {
+        loadMods();
+      }
+    } catch (err) {
+      setToast({ kind: 'error', text: String(err).replace(/^Error:\s*/, '') });
+    } finally {
+      setStopPending(false);
+      refreshGameStatus();
+      refreshStashStatus();
     }
   };
 
@@ -348,9 +404,25 @@ export default function Sidebar() {
         )}
 
         <div className="space-y-1">
+          {gameRunning || stopPending ? (
+            <button
+              onClick={handleStopGame}
+              disabled={stopPending || !!launchPending}
+              title="Stop the running Deadlock process"
+              className="flex w-full items-center gap-3 h-11 px-3 rounded-lg border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-sm font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {stopPending ? (
+                <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
+              ) : (
+                <Square className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
+              )}
+              <span className="flex-1 text-left">Stop Game</span>
+            </button>
+          ) : (
+            <>
           <button
             onClick={handleLaunchModded}
-            disabled={!canLaunch || !!launchPending}
+            disabled={!canLaunch || !!launchPending || stopPending}
             title={
               !canLaunch
                 ? 'Configure your Deadlock path in Settings first'
@@ -370,7 +442,7 @@ export default function Sidebar() {
 
           <button
             onClick={handleLaunchVanilla}
-            disabled={!canLaunch || !!launchPending || stashStatus.active}
+            disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
             title={
               !canLaunch
                 ? 'Configure your Deadlock path in Settings first'
@@ -387,6 +459,8 @@ export default function Sidebar() {
             )}
             <span className="flex-1 text-left">Launch Vanilla</span>
           </button>
+            </>
+          )}
         </div>
 
         <button

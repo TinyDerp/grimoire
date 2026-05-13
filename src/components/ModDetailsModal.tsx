@@ -10,17 +10,19 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileArchive,
   CheckCircle2,
   Power,
   Maximize2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import type { GameBananaModDetails, GameBananaComment } from '../types/gamebanana';
+import type { GameBananaModDetails, GameBananaComment, GameBananaFile } from '../types/gamebanana';
 import { isModOutdated, formatDate } from '../types/gamebanana';
 import { getModComments } from '../lib/api';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
+import { ArchivedTag } from './common/ui';
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
@@ -77,10 +79,15 @@ export default function ModDetailsModal({
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
+  const [archivedFilesOpen, setArchivedFilesOpen] = useState(false);
   // Lightbox state — when true, the selected image renders full-screen at
   // its native GB resolution so the user can inspect detail the inline
   // preview hides.
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  useEffect(() => {
+    setArchivedFilesOpen(false);
+  }, [mod.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,8 +161,121 @@ export default function ModDetailsModal({
     return 'Install';
   };
 
-  const totalDownloads = (mod.files ?? []).reduce((sum, f) => sum + f.downloadCount, 0);
+  const files = mod.files ?? [];
+  const currentFiles = files.filter((file) => !file.isArchived);
+  const archivedFiles = files.filter((file) => file.isArchived);
+  const totalDownloads = files.reduce((sum, f) => sum + f.downloadCount, 0);
   const outdated = dateModified ? isModOutdated(dateModified) : false;
+
+  const renderFileRow = (file: GameBananaFile, archived = false) => {
+    const isInstalled = installedFileIds.has(file.id);
+    const isUpdate = updateAvailable && isInstalled;
+    const isActive = activeFileIds.has(file.id);
+    const isDownloadingThis = downloadingFileId === file.id;
+    const installedFileState = installedFileStates?.get(file.id);
+    const showEnablePill =
+      !!installedFileState &&
+      !installedFileState.enabled &&
+      !!onEnableFile &&
+      !isDownloadingThis;
+    const pct = progress && progress.total > 0
+      ? Math.round((progress.downloaded / progress.total) * 100)
+      : null;
+
+    return (
+      <div
+        key={file.id}
+        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+          isUpdate
+            ? 'border-accent/40 bg-accent/5'
+            : isActive
+              ? 'border-accent/50 bg-accent/10'
+              : isInstalled
+                ? 'border-green-500/30 bg-green-500/5'
+                : archived
+                  ? 'border-border/70 bg-bg-secondary/70'
+                  : 'border-border bg-bg-tertiary'
+        }`}
+      >
+        <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
+          isUpdate
+            ? 'bg-accent/15 text-accent'
+            : isActive
+              ? 'bg-accent/20 text-accent'
+              : isInstalled
+                ? 'bg-green-500/15 text-green-400'
+                : archived
+                  ? 'bg-bg-tertiary text-text-tertiary'
+                  : 'bg-bg-secondary text-text-secondary'
+        }`}>
+          <FileArchive className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
+            {archived && <ArchivedTag />}
+            {isActive && (
+              <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
+                Active
+              </span>
+            )}
+          </div>
+          {file.description && (
+            <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
+              {file.description}
+            </p>
+          )}
+          <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
+            <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+            <span className="opacity-50">&bull;</span>
+            <span>{file.downloadCount.toLocaleString()} downloads</span>
+          </div>
+          {isDownloadingThis && pct !== null && (
+            <div className="mt-2 h-1 w-full rounded-full bg-bg-secondary overflow-hidden">
+              <div
+                className="h-full bg-accent transition-all duration-200"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          )}
+        </div>
+        {showEnablePill && installedFileState && (
+          <button
+            onClick={() => onEnableFile!(installedFileState.modId)}
+            disabled={downloadingFileId !== null}
+            title="Enable this mod"
+            className="flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/40"
+          >
+            <Power className="w-3.5 h-3.5" />
+            Enable
+          </button>
+        )}
+        <button
+          onClick={() => onDownload(file.id, file.fileName)}
+          disabled={downloadingFileId !== null}
+          className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+            isUpdate
+              ? 'bg-accent hover:bg-accent-hover text-white'
+              : isInstalled
+                ? 'bg-bg-secondary hover:bg-bg-primary text-text-primary border border-border'
+                : 'bg-accent hover:bg-accent-hover text-white'
+          }`}
+        >
+          {isDownloadingThis ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              {actionLabel(file.id)}
+            </>
+          )}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -350,115 +470,40 @@ export default function ModDetailsModal({
                 </section>
               )}
 
-              {mod.files && mod.files.length > 0 && (
+              {files.length > 0 && (
                 <section>
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
-                    Files {mod.files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({mod.files.length})</span>}
+                    Files {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
                   </h3>
                   <div className="space-y-2">
-                    {mod.files.map((file) => {
-                      const isInstalled = installedFileIds.has(file.id);
-                      const isUpdate = updateAvailable && isInstalled;
-                      const isActive = activeFileIds.has(file.id);
-                      const isDownloadingThis = downloadingFileId === file.id;
-                      const installedFileState = installedFileStates?.get(file.id);
-                      const showEnablePill =
-                        !!installedFileState &&
-                        !installedFileState.enabled &&
-                        !!onEnableFile &&
-                        !isDownloadingThis;
-                      const pct = progress && progress.total > 0
-                        ? Math.round((progress.downloaded / progress.total) * 100)
-                        : null;
-                      return (
-                        <div
-                          key={file.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                            isUpdate
-                              ? 'border-accent/40 bg-accent/5'
-                              : isActive
-                                ? 'border-accent/50 bg-accent/10'
-                                : isInstalled
-                                  ? 'border-green-500/30 bg-green-500/5'
-                                  : 'border-border bg-bg-tertiary'
-                          }`}
+                    {currentFiles.map((file) => renderFileRow(file))}
+                    {archivedFiles.length > 0 && (
+                      <div className={currentFiles.length > 0 ? 'pt-1' : undefined}>
+                        <button
+                          type="button"
+                          onClick={() => setArchivedFilesOpen((open) => !open)}
+                          aria-expanded={archivedFilesOpen}
+                          className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-bg-secondary/80 px-3 py-2 text-left text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
                         >
-                          <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
-                            isUpdate
-                              ? 'bg-accent/15 text-accent'
-                              : isActive
-                                ? 'bg-accent/20 text-accent'
-                                : isInstalled
-                                  ? 'bg-green-500/15 text-green-400'
-                                  : 'bg-bg-secondary text-text-secondary'
-                          }`}>
-                            <FileArchive className="w-5 h-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
-                              {isActive && (
-                                <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
-                                  Active
-                                </span>
-                              )}
-                            </div>
-                            {file.description && (
-                              <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
-                                {file.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
-                              <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
-                              <span className="opacity-50">•</span>
-                              <span>{file.downloadCount.toLocaleString()} downloads</span>
-                            </div>
-                            {isDownloadingThis && pct !== null && (
-                              <div className="mt-2 h-1 w-full rounded-full bg-bg-secondary overflow-hidden">
-                                <div
-                                  className="h-full bg-accent transition-all duration-200"
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                          {showEnablePill && installedFileState && (
-                            <button
-                              onClick={() => onEnableFile!(installedFileState.modId)}
-                              disabled={downloadingFileId !== null}
-                              title="Enable this mod"
-                              className="flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/40"
-                            >
-                              <Power className="w-3.5 h-3.5" />
-                              Enable
-                            </button>
-                          )}
-                          <button
-                            onClick={() => onDownload(file.id, file.fileName)}
-                            disabled={downloadingFileId !== null}
-                            className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
-                              isUpdate
-                                ? 'bg-accent hover:bg-accent-hover text-white'
-                                : isInstalled
-                                  ? 'bg-bg-secondary hover:bg-bg-primary text-text-primary border border-border'
-                                  : 'bg-accent hover:bg-accent-hover text-white'
-                            }`}
-                          >
-                            {isDownloadingThis ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                {extracting ? 'Extracting…' : pct !== null ? `${pct}%` : 'Starting'}
-                              </>
+                          <span className="flex items-center gap-2 min-w-0">
+                            {archivedFilesOpen ? (
+                              <ChevronDown className="w-4 h-4 flex-shrink-0" />
                             ) : (
-                              <>
-                                <Download className="w-4 h-4" />
-                                {actionLabel(file.id)}
-                              </>
+                              <ChevronRight className="w-4 h-4 flex-shrink-0" />
                             )}
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <span className="font-medium truncate">Archived files</span>
+                          </span>
+                          <span className="flex-shrink-0 rounded-full bg-bg-primary px-2 py-0.5 text-[11px] text-text-tertiary border border-border">
+                            {archivedFiles.length}
+                          </span>
+                        </button>
+                        {archivedFilesOpen && (
+                          <div className="mt-2 space-y-2">
+                            {archivedFiles.map((file) => renderFileRow(file, true))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
               )}

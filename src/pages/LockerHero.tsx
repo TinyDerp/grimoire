@@ -11,7 +11,9 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import VariantPickerModal from '../components/VariantPickerModal';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
+import type { Mod } from '../types/mod';
 import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
@@ -23,6 +25,7 @@ import {
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
+  groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
   parseMinaVariant,
@@ -34,7 +37,7 @@ export default function LockerHero() {
   const navigate = useNavigate();
   const params = useParams<{ heroId: string }>();
   const heroId = Number(params.heroId);
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod, reorderMods, setVariantLabel } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
@@ -57,6 +60,7 @@ export default function LockerHero() {
     garter: 'Default',
     dress: 'Default',
   });
+  const [pickerSkinKey, setPickerSkinKey] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -122,6 +126,16 @@ export default function LockerHero() {
   const heroMods = useMemo(() => groupModsByCategory(lockerMods, heroList), [lockerMods, heroList]);
   const list = useMemo(() => (hero ? heroMods.map.get(hero.id) ?? [] : []), [hero, heroMods]);
   const skinCount = useMemo(() => countLockerSkins(list), [list]);
+  const pickerSkin = useMemo(() => {
+    if (!pickerSkinKey) return null;
+    return groupLockerSkins(list).find((skin) => skin.key === pickerSkinKey) ?? null;
+  }, [list, pickerSkinKey]);
+
+  useEffect(() => {
+    if (pickerSkinKey && !pickerSkin) {
+      setPickerSkinKey(null);
+    }
+  }, [pickerSkinKey, pickerSkin]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -130,6 +144,31 @@ export default function LockerHero() {
     () => findMinaVariant(minaVariants, minaSelection),
     [minaVariants, minaSelection]
   );
+
+  const findFreshLockerTargetScope = (targetId: string) => {
+    if (!hero) return null;
+    const freshLockerMods = useAppStore.getState().mods.filter(isLockerManagedMod);
+    const freshHeroMods = groupModsByCategory(freshLockerMods, heroList);
+    const scope = freshHeroMods.map.get(hero.id) ?? [];
+    const target = scope.find((mod) => mod.id === targetId);
+    return target ? { target, scope } : null;
+  };
+
+  const setLockerVariantEnabled = async (target: Mod, enabled: boolean) => {
+    const fresh = findFreshLockerTargetScope(target.id);
+    if (!fresh) return;
+    const targetSkinKey = getLockerSkinKey(fresh.target);
+    if (enabled) {
+      for (const mod of fresh.scope) {
+        if (getLockerSkinKey(mod) !== targetSkinKey && mod.enabled) {
+          await toggleMod(mod.id);
+        }
+      }
+    }
+    if (fresh.target.enabled !== enabled) {
+      await toggleMod(fresh.target.id);
+    }
+  };
 
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
@@ -270,7 +309,8 @@ export default function LockerHero() {
   }
 
   return (
-    <div className="flex h-full">
+    <>
+      <div className="flex h-full">
       {/* Left Panel - Skin Selection */}
       <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary animate-slide-in-left">
         <div className="p-6 space-y-6">
@@ -323,6 +363,7 @@ export default function LockerHero() {
             <HeroSkinsPanel
               mods={list}
               onSelect={setActiveSkin}
+              onOpenVariantPicker={(skin) => setPickerSkinKey(skin.key)}
               categoryId={hero.id}
               onRefreshMods={loadMods}
               minaPresets={hero.name === 'Mina' ? minaPresets : []}
@@ -376,7 +417,19 @@ export default function LockerHero() {
         {/* Bottom gradient for depth */}
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
-    </div>
+      </div>
+      {pickerSkin && (
+        <VariantPickerModal
+          modName={pickerSkin.primary.name}
+          variants={pickerSkin.variants}
+          onSetVariantEnabled={setLockerVariantEnabled}
+          onReorderVariants={(orderedFileNames) => reorderMods(orderedFileNames)}
+          onDeleteVariant={(variant) => deleteMod(variant.id)}
+          onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
+          onClose={() => setPickerSkinKey(null)}
+        />
+      )}
+    </>
   );
 }
 
