@@ -13,6 +13,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import {
+  FAVORITE_HEROES_KEY,
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
@@ -23,6 +24,7 @@ import {
   getHeroWikiUrl,
   groupModsByCategory,
   parseMinaVariant,
+  readStoredFavorites,
   type MinaSelection,
   type MinaVariant,
 } from '../lib/lockerUtils';
@@ -37,7 +39,15 @@ export default function LockerHero() {
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
-  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
+  // Seed from localStorage synchronously so the value is present on the very
+  // first render. Doing this in a useEffect instead would race against the
+  // save effect under StrictMode: the save closure captures `[]`, writes that
+  // back to localStorage, and the second load (which StrictMode replays) then
+  // reads the clobbered empty value and wins — silently dropping the user's
+  // saved favorites.
+  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>(() =>
+    readStoredFavorites()
+  );
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
   });
@@ -92,21 +102,7 @@ export default function LockerHero() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem('lockerFavorites');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setFavoriteHeroes(parsed.filter((id) => typeof id === 'number'));
-        }
-      } catch {
-        setFavoriteHeroes([]);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('lockerFavorites', JSON.stringify(favoriteHeroes));
+    localStorage.setItem(FAVORITE_HEROES_KEY, JSON.stringify(favoriteHeroes));
   }, [favoriteHeroes]);
 
   useEffect(() => {

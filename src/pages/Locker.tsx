@@ -16,6 +16,7 @@ import type { Mod } from '../types/mod';
 import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
 import { Skeleton } from '../components/common/Skeleton';
 import {
+  FAVORITE_HEROES_KEY,
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
@@ -27,6 +28,7 @@ import {
   getHeroWikiUrl,
   groupModsByCategory,
   parseMinaVariant,
+  readStoredFavorites,
   type HeroCategory,
   type MinaPreset,
   type MinaSelection,
@@ -44,7 +46,13 @@ export default function Locker() {
     const stored = localStorage.getItem('lockerViewMode');
     return stored === 'list' ? 'list' : 'gallery';
   });
-  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
+  // Seed from localStorage synchronously so the value is present on the very
+  // first render. A useEffect-driven load would race against the save effect
+  // under StrictMode: the save closure captures `[]`, clobbers localStorage,
+  // and StrictMode's replayed load reads the empty value and wins.
+  const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>(() =>
+    readStoredFavorites()
+  );
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
   });
@@ -100,21 +108,7 @@ export default function Locker() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem('lockerFavorites');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setFavoriteHeroes(parsed.filter((id) => typeof id === 'number'));
-        }
-      } catch {
-        setFavoriteHeroes([]);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('lockerFavorites', JSON.stringify(favoriteHeroes));
+    localStorage.setItem(FAVORITE_HEROES_KEY, JSON.stringify(favoriteHeroes));
   }, [favoriteHeroes]);
 
   useEffect(() => {
@@ -444,8 +438,7 @@ interface HeroGalleryCardProps {
   hero: HeroCategory;
   skinCount: number;
   isFavorite: boolean;
-  isActive: boolean;
-  onNavigate: (rect: DOMRect) => void;
+  onNavigate: () => void;
   onToggleFavorite: () => void;
 }
 
@@ -466,7 +459,6 @@ function HeroGalleryCard({
   hero,
   skinCount,
   isFavorite,
-  isActive,
   onNavigate,
   onToggleFavorite,
 }: HeroGalleryCardProps) {
@@ -481,12 +473,12 @@ function HeroGalleryCard({
   const [nameLoaded, setNameLoaded] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  // Card is visible once the active hero changes to it, an IntersectionObserver
-  // sees it scroll into view, or the platform lacks IntersectionObserver entirely
-  // (in which case eager-render). Derived rather than chained setState-in-effects.
+  // Card art loads once IntersectionObserver sees it scroll into view, or
+  // immediately on platforms without IntersectionObserver. Derived rather
+  // than chained setState-in-effects.
   const supportsIntersectionObserver =
     typeof window !== 'undefined' && 'IntersectionObserver' in window;
-  const isVisible = isActive || hasIntersected || !supportsIntersectionObserver;
+  const isVisible = hasIntersected || !supportsIntersectionObserver;
 
   const renderSrc = !isVisible
     ? ''
@@ -528,18 +520,11 @@ function HeroGalleryCard({
     setFallbackStep(3);
   };
 
-  const handleClick = () => {
-    if (cardRef.current) {
-      onNavigate(cardRef.current.getBoundingClientRect());
-    }
-  };
-
   return (
     <div
-      onClick={handleClick}
+      onClick={onNavigate}
       ref={cardRef}
-      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
-        }`}
+      className="group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
@@ -557,11 +542,11 @@ function HeroGalleryCard({
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'} ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
+            className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
             style={{
               objectPosition: `${facePositionX}% 20%`,
               imageRendering: 'auto',
-              transform: isActive ? undefined : 'translateZ(0)',
+              transform: 'translateZ(0)',
             }}
             decoding="async"
             onLoad={() => setRenderLoaded(true)}
@@ -574,20 +559,27 @@ function HeroGalleryCard({
           </div>
         )}
       </div>
-      {isFavorite && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onToggleFavorite();
-          }}
-          className="absolute right-2 top-2 flex items-center justify-center rounded-full border border-yellow-400/60 bg-yellow-400/20 p-1 text-yellow-300 transition-colors"
-          title="Unfavorite"
-        >
-          <Star className="w-3 h-3 fill-current" />
-        </button>
-      )}
+      {/* Favorite toggle. Favorited cards keep a pinned filled star so the
+          state reads at a glance in the sorted grid. Un-favorited cards keep
+          the same slot but reveal a softer outline-star on hover, restoring
+          the hover-to-favorite affordance. */}
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleFavorite();
+        }}
+        aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
+        title={isFavorite ? 'Unfavorite' : 'Favorite'}
+        className={`absolute right-2 top-2 z-20 flex items-center justify-center rounded-full border p-1 transition-opacity ${
+          isFavorite
+            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300 opacity-100'
+            : 'border-white/30 bg-black/40 text-white/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/60'
+        }`}
+      >
+        <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
+      </button>
       <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
         {nameFailed ? (
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
@@ -599,8 +591,8 @@ function HeroGalleryCard({
             <img
               src={namePath}
               alt={hero.name}
-              className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'} ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
-              style={{ transform: isActive ? undefined : 'translateZ(0)' }}
+              className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
+              style={{ transform: 'translateZ(0)' }}
               decoding="async"
               onLoad={() => setNameLoaded(true)}
               onError={() => setNameFailed(true)}
