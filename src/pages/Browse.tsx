@@ -92,12 +92,17 @@ function flattenCategories(
   return results;
 }
 
-// Abbreviate counts (1234 -> 1.2k, 98765 -> 99k)
-function formatCount(n: number): string {
-  if (n < 1000) return String(n);
-  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
-  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
-  return `${(n / 1_000_000).toFixed(1)}m`;
+// Abbreviate counts (1234 -> 1.2k, 98765 -> 99k). Falsy/non-finite inputs
+// render as "0" — without this, undefined slips past every `<` check
+// (NaN comparisons are always false) and falls through to the millions
+// branch, producing "NaNm" on mods with no recorded likes/views/downloads.
+function formatCount(n: number | null | undefined): string {
+  if (!Number.isFinite(n) || (n as number) <= 0) return '0';
+  const value = n as number;
+  if (value < 1000) return String(value);
+  if (value < 10_000) return `${(value / 1000).toFixed(1)}k`;
+  if (value < 1_000_000) return `${Math.round(value / 1000)}k`;
+  return `${(value / 1_000_000).toFixed(1)}m`;
 }
 
 // Treat Enter/Space as a click on role="button" divs (keyboard navigation).
