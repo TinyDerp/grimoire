@@ -170,6 +170,43 @@ export default function LockerHero() {
     }
   };
 
+  const reorderLockerVariantTo = async (
+    variants: Mod[],
+    source: Mod,
+    neighbor: Mod,
+    position: 'before' | 'after'
+  ) => {
+    if (source.id === neighbor.id || source.enabled !== neighbor.enabled) return;
+    const working = variants.slice();
+    const sourceIdx = working.findIndex((v) => v.id === source.id);
+    if (sourceIdx === -1) return;
+    const [moved] = working.splice(sourceIdx, 1);
+    const neighborIdx = working.findIndex((v) => v.id === neighbor.id);
+    if (neighborIdx === -1) return;
+    working.splice(position === 'before' ? neighborIdx : neighborIdx + 1, 0, moved);
+    await reorderMods(working.map((v) => v.fileName));
+  };
+
+  const moveLockerVariant = async (
+    variants: Mod[],
+    target: Mod,
+    direction: 'up' | 'down'
+  ) => {
+    const idx = variants.findIndex((v) => v.id === target.id);
+    if (idx === -1) return;
+    const neighbor = variants[direction === 'up' ? idx - 1 : idx + 1];
+    if (!neighbor) return;
+    await reorderLockerVariantTo(variants, target, neighbor, direction === 'up' ? 'before' : 'after');
+  };
+
+  const disableLockerVariants = async (variants: Mod[]) => {
+    for (const variant of variants) {
+      if (variant.enabled) {
+        await setLockerVariantEnabled(variant, false);
+      }
+    }
+  };
+
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = heroMods.map.get(hero.id) ?? [];
@@ -422,8 +459,12 @@ export default function LockerHero() {
         <VariantPickerModal
           modName={pickerSkin.primary.name}
           variants={pickerSkin.variants}
-          onSetVariantEnabled={setLockerVariantEnabled}
-          onReorderVariants={(orderedFileNames) => reorderMods(orderedFileNames)}
+          onToggle={(variant) => setLockerVariantEnabled(variant, !variant.enabled)}
+          onMoveVariant={(variant, direction) => moveLockerVariant(pickerSkin.variants, variant, direction)}
+          onReorderVariantTo={(source, neighbor, position) =>
+            reorderLockerVariantTo(pickerSkin.variants, source, neighbor, position)
+          }
+          onDisableAll={() => disableLockerVariants(pickerSkin.variants)}
           onDeleteVariant={(variant) => deleteMod(variant.id)}
           onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
           onClose={() => setPickerSkinKey(null)}

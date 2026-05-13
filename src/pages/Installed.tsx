@@ -58,6 +58,8 @@ type ModEntry =
       variants: Mod[];
       /** Enabled files in this group. Empty when the whole group is disabled. */
       enabledVariants: Mod[];
+      /** First enabled variant in priority order, or null when every variant is disabled. */
+      active: Mod | null;
       /** Mod we render visuals from (thumbnail, name, category). The first
        *  enabled file when any are enabled, else the first variant by priority. */
       primary: Mod;
@@ -97,6 +99,7 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
     // them in the same order as the addons folder.
     variants.sort((a, b) => a.priority - b.priority);
     const enabledVariants = variants.filter((v) => v.enabled);
+    const active = enabledVariants[0] ?? null;
     const primary = enabledVariants[0] ?? variants[0];
     const totalSize = variants.reduce((sum, v) => sum + v.size, 0);
     entries.push({
@@ -104,6 +107,7 @@ function buildModEntries(mods: Mod[]): ModEntry[] {
       gameBananaId,
       variants,
       enabledVariants,
+      active,
       primary,
       totalSize,
       key: `group:${gameBananaId}`,
@@ -366,10 +370,15 @@ export default function Installed() {
     setModToDelete(null);
   };
 
-  const setVariantEnabled = async (target: Mod, enabled: boolean) => {
-    if (target.enabled !== enabled) {
-      await toggleMod(target.id);
-    }
+  /**
+   * Flip a single variant's enabled state. Variants are independent — a
+   * mod's model VPK and its voice-lines VPK (same archive) or its red and
+   * blue uploads (different archives on the same mod page) can each be on
+   * or off without affecting the others. Sequential just because the store
+   * action is single-mod.
+   */
+  const toggleVariant = async (target: Mod) => {
+    await toggleMod(target.id);
   };
 
   const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean) => {
@@ -380,6 +389,10 @@ export default function Installed() {
     }
   };
 
+  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
+    await setGroupEnabled(group, false);
+  };
+
   /** Top-level toggle on a grouped card. If anything is enabled, disable the
    *  whole group; otherwise open the picker so the user can choose the files. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
@@ -388,6 +401,69 @@ export default function Installed() {
     } else {
       setPickerGroupId(group.gameBananaId);
     }
+  };
+
+  /**
+   * Reorder a variant relative to one of its picker-siblings. Used by both
+   * the chevron up/down buttons and the picker's drag-and-drop. Returns
+   * early when the neighbor lives in a different section — cross-section
+   * moves would silently flip a variant's on/off status, which the picker
+   * UI explicitly blocks.
+   *
+   * The picker shows a group's variants sorted by priority, so the
+   * before/after semantics match what the user sees: drop "before" puts
+   * the source at the neighbor's slot (loads earlier); drop "after" puts
+   * it just past the neighbor (loads later, wins overlapping files).
+   *
+   * Implementation: splice the source out of its section list, re-find the
+   * neighbor's index (it may have shifted when source was removed), splice
+   * the source back in before/after the neighbor, then pass the full
+   * filename list to reorderMods. The backend renumbers densely 1..N
+   * inside each section, so the index changes manifest as pak##_ renames
+   * on disk.
+   */
+  const reorderVariantTo = async (
+    source: Mod,
+    neighbor: Mod,
+    position: DropPosition
+  ) => {
+    if (source.id === neighbor.id) return;
+    if (source.enabled !== neighbor.enabled) return;
+
+    const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
+    const disabledMods = mods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
+    const section = source.enabled ? enabledMods : disabledMods;
+    const next = section.slice();
+    const srcIdx = next.findIndex((m) => m.id === source.id);
+    if (srcIdx === -1) return;
+    next.splice(srcIdx, 1);
+    const neighborIdx = next.findIndex((m) => m.id === neighbor.id);
+    if (neighborIdx === -1) return;
+    const insertAt = position === 'before' ? neighborIdx : neighborIdx + 1;
+    next.splice(insertAt, 0, source);
+
+    const full = source.enabled
+      ? [...next, ...disabledMods]
+      : [...enabledMods, ...next];
+    await reorderMods(full.map((m) => m.fileName));
+  };
+
+  /**
+   * Convenience wrapper for the chevron buttons in the variant picker.
+   * "Up" / "down" map to swapping with the picker-neighbor in the obvious
+   * direction; reorderVariantTo handles the section-safety check.
+   */
+  const moveVariant = async (
+    group: Extract<ModEntry, { kind: 'group' }>,
+    target: Mod,
+    direction: 'up' | 'down'
+  ) => {
+    const idxInPicker = group.variants.findIndex((v) => v.id === target.id);
+    if (idxInPicker === -1) return;
+    const neighborIdx = direction === 'up' ? idxInPicker - 1 : idxInPicker + 1;
+    if (neighborIdx < 0 || neighborIdx >= group.variants.length) return;
+    const neighbor = group.variants[neighborIdx];
+    await reorderVariantTo(target, neighbor, direction === 'up' ? 'before' : 'after');
   };
 
   // Auto-scroll the main content container while drag-reordering. Native HTML
@@ -621,12 +697,16 @@ export default function Installed() {
    * each carry a 40-line inline JSX block.
    *
    * Group cards:
-   *   - Drag-reorder moves every file in the group as a block.
+   *   - Drag-reorder moves every variant as a contiguous block, preserving
+   *     their internal order (applyReorder + buildModEntries handle the
+   *     block math). Disabled during search since the visible order doesn't
+   *     match the full priority order.
    *   - Toggle disables every enabled file, or opens the picker when none
    *     are enabled yet.
-   *   - Delete asks the user to confirm removing every file.
-   *   - Card body click opens the file selection modal.
-   *   - Conflicts shown are the union of conflicts on enabled files.
+   *   - Delete asks the user to confirm removing every variant.
+   *   - Card body click opens the variant picker modal.
+   *   - Conflicts shown are the union of conflicts on every currently-enabled
+   *     variant.
    */
   const renderEntryCard = (entry: ModEntry, section: 'enabled' | 'disabled') => {
     if (entry.kind === 'single') {
@@ -750,6 +830,12 @@ export default function Installed() {
             variant.sourceFileName ??
             variant.fileName
           ),
+          activeFileName: (() => {
+            const enabled = entry.variants.filter((v) => v.enabled);
+            if (enabled.length !== 1) return null;
+            const v = enabled[0];
+            return v.variantLabel ?? v.fileDescription ?? v.sourceFileName ?? v.fileName;
+          })(),
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
       />
@@ -1022,9 +1108,13 @@ export default function Installed() {
           <VariantPickerModal
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
-            onSetVariantEnabled={(variant, enabled) => setVariantEnabled(variant, enabled)}
-            onReorderVariants={(orderedFileNames) => reorderMods(orderedFileNames)}
             conflictsByVariantId={conflictsByVariantId}
+            onToggle={(target) => toggleVariant(target)}
+            onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
+            onReorderVariantTo={(source, neighbor, position) =>
+              reorderVariantTo(source, neighbor, position)
+            }
+            onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
@@ -1190,6 +1280,12 @@ interface ModCardProps {
     /** Enabled file labels for this group. Empty when fully disabled. */
     enabledCount: number;
     enabledLabels: string[];
+    /** Display label for the enabled variant when exactly one is on (and
+     *  null otherwise — for 0 active or 2+ active, the card's toggle state
+     *  plus the variant-count pill convey enough; details live in the
+     *  picker). Shown in small text so the user can tell at a glance which
+     *  preset is live in the common single-active case. */
+    activeFileName: string | null;
     onOpenPicker: () => void;
   };
 }
