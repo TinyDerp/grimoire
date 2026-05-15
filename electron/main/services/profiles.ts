@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkS
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
 import { scanMods, enableMod, disableMod, setModPriority } from './mods';
+import { getModMetadata } from './metadata';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {
@@ -111,6 +112,57 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
             priority: mod.priority,
         })),
         crosshair: crosshairSettings,
+        autoexecCommands: autoexecData.commands,
+        createdAt: now,
+        updatedAt: now,
+    };
+
+    const profiles = loadProfiles();
+    profiles.push(profile);
+    saveProfiles(profiles);
+
+    return profile;
+}
+
+/**
+ * Create a profile from a specific subset of installed mods, identified by
+ * GameBanana mod ids. Used by the collection import flow: the resulting
+ * profile contains ONLY the mods that were just imported, not every other
+ * enabled mod in the user's library.
+ *
+ * Mods are recorded as enabled=true regardless of their current filesystem
+ * state. The download pipeline installs new mods to the disabled folder,
+ * so capturing live state would save the profile with everything disabled.
+ * The user's intent in saving a collection as a profile is "make these the
+ * active set when I apply this", so we encode that explicitly.
+ */
+export async function createProfileFromGameBananaIds(
+    deadlockPath: string,
+    name: string,
+    gameBananaIds: number[]
+): Promise<Profile> {
+    const idSet = new Set(gameBananaIds);
+    const mods = await scanMods(deadlockPath);
+    // scanMods returns filesystem-only state. gameBananaId lives in the
+    // metadata sidecar (read at the IPC layer via enrichMod), so we look
+    // it up per-mod here. Without this the filter never matches and the
+    // profile saves zero mods.
+    const matching = mods.filter((mod) => {
+        const metadata = getModMetadata(mod.fileName);
+        return metadata?.gameBananaId !== undefined && idSet.has(metadata.gameBananaId);
+    });
+
+    const autoexecData = readAutoexec(deadlockPath);
+    const now = new Date().toISOString();
+
+    const profile: Profile = {
+        id: generateProfileId(),
+        name,
+        mods: matching.map((mod) => ({
+            fileName: mod.fileName,
+            enabled: true,
+            priority: mod.priority,
+        })),
         autoexecCommands: autoexecData.commands,
         createdAt: now,
         updatedAt: now,

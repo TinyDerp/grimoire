@@ -6,6 +6,8 @@ import type {
   GameBananaCategoryNode,
   GameBananaMod,
   GameBananaCommentsResponse,
+  GameBananaCollection,
+  GameBananaCollectionItemsResponse,
 } from '../types/gamebanana';
 
 // Re-export types for convenience
@@ -15,6 +17,8 @@ export type {
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
+  GameBananaCollection,
+  GameBananaCollectionItemsResponse,
 };
 
 // Settings
@@ -187,6 +191,17 @@ export async function getGamebananaCategories(
   return window.electronAPI.getGameBananaCategories({ categoryModelName });
 }
 
+export async function getCollection(collectionId: number): Promise<GameBananaCollection> {
+  return window.electronAPI.getCollection({ collectionId });
+}
+
+export async function getCollectionItems(
+  collectionId: number,
+  page = 1
+): Promise<GameBananaCollectionItemsResponse> {
+  return window.electronAPI.getCollectionItems({ collectionId, page });
+}
+
 export async function setMinaPreset(presetFileName: string): Promise<void> {
   return window.electronAPI.setMinaPreset({ presetFileName });
 }
@@ -319,6 +334,13 @@ export async function getProfiles(): Promise<Profile[]> {
 
 export async function createProfile(name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
   return window.electronAPI.createProfile(name, crosshairSettings);
+}
+
+export async function createProfileFromGameBananaIds(
+  name: string,
+  gameBananaIds: number[]
+): Promise<Profile> {
+  return window.electronAPI.createProfileFromGameBananaIds({ name, gameBananaIds });
 }
 
 export async function updateProfile(profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {

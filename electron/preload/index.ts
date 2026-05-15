@@ -38,6 +38,8 @@ export interface ElectronAPI {
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
+    getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;
+    getCollectionItems: (args: { collectionId: number; page?: number }) => Promise<GameBananaCollectionItemsResponse>;
 
     // Mina Variants
     setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
@@ -99,6 +101,7 @@ export interface ElectronAPI {
     // Profiles
     getProfiles: () => Promise<Profile[]>;
     createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
     updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
     applyProfile: (profileId: string) => Promise<Profile>;
     deleteProfile: (profileId: string) => Promise<void>;
@@ -513,6 +516,23 @@ interface GameBananaCategoryNode {
     children?: GameBananaCategoryNode[];
 }
 
+interface GameBananaCollection {
+    id: number;
+    name: string;
+    description?: string;
+    dateAdded: number;
+    dateModified: number;
+    submitter?: unknown;
+    previewMedia?: unknown;
+}
+
+interface GameBananaCollectionItemsResponse {
+    records: unknown[];
+    totalCount: number;
+    isComplete: boolean;
+    perPage: number;
+}
+
 interface ModConflict {
     modA: string;
     modAName: string;
@@ -728,6 +748,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>
         ipcRenderer.invoke('get-gamebanana-categories', args),
+    getCollection: (args: { collectionId: number }) =>
+        ipcRenderer.invoke('get-collection', args),
+    getCollectionItems: (args: { collectionId: number; page?: number }) =>
+        ipcRenderer.invoke('get-collection-items', args),
 
     // Mina Variants
     setMinaPreset: (args: SetMinaPresetArgs) => ipcRenderer.invoke('set-mina-preset', args),
@@ -824,6 +848,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),
     createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('create-profile', name, crosshairSettings),
+    createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) =>
+        ipcRenderer.invoke('create-profile-from-gamebanana-ids', args),
     updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('update-profile', profileId, crosshairSettings),
     applyProfile: (profileId: string) => ipcRenderer.invoke('apply-profile', profileId),
     deleteProfile: (profileId: string) => ipcRenderer.invoke('delete-profile', profileId),

@@ -103,6 +103,65 @@ export interface GameBananaCommentsResponse {
   totalCount: number;
 }
 
+export interface GameBananaCollection {
+  id: number;
+  name: string;
+  description?: string;
+  dateAdded: number;
+  dateModified: number;
+  submitter?: GameBananaSubmitter;
+  previewMedia?: GameBananaPreviewMedia;
+}
+
+export interface GameBananaCollectionItem {
+  id: number;
+  modelName: string;
+  name: string;
+  profileUrl: string;
+  dateAdded: number;
+  dateModified: number;
+  likeCount: number;
+  viewCount: number;
+  hasFiles: boolean;
+  nsfw: boolean;
+  gameId?: number;
+  gameName?: string;
+  submitter?: GameBananaSubmitter;
+  previewMedia?: GameBananaPreviewMedia;
+  rootCategory?: GameBananaCategory;
+}
+
+export interface GameBananaCollectionItemsResponse {
+  records: GameBananaCollectionItem[];
+  totalCount: number;
+  isComplete: boolean;
+  perPage: number;
+}
+
+// Parse a collection identifier from either a numeric id or a GameBanana URL.
+// Mirrored from the main-process helper so the renderer can validate input
+// locally before firing an IPC call.
+export function parseCollectionId(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (!url.hostname.endsWith('gamebanana.com')) return null;
+    const match = url.pathname.match(/\/collections\/(\d+)/i);
+    if (!match) return null;
+    const n = Number(match[1]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 export function getModThumbnail(mod: GameBananaMod): string | undefined {
   const images = mod.previewMedia?.images;
   if (!images || images.length === 0) return undefined;
@@ -117,8 +176,13 @@ export function getSoundPreviewUrl(mod: GameBananaMod): string | undefined {
 }
 
 export function getPrimaryFile(files: GameBananaFile[]): GameBananaFile {
-  let primary = files[0];
-  for (const file of files) {
+  // Prefer non-archived files: an archived legacy file can outrank a current
+  // one on raw download count just because it's been around longer. Only fall
+  // back to archived files when every option is archived.
+  const live = files.filter((f) => !f.isArchived);
+  const pool = live.length > 0 ? live : files;
+  let primary = pool[0];
+  for (const file of pool) {
     if (file.downloadCount > primary.downloadCount) {
       primary = file;
     }

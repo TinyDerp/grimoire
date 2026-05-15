@@ -4,6 +4,8 @@ import type {
     GameBananaModDetails,
     GameBananaSection,
     GameBananaCategoryNode,
+    GameBananaCollection,
+    GameBananaCollectionItemsResponse,
 } from './gamebanana';
 
 export interface BrowseModsArgs {
@@ -297,6 +299,8 @@ export interface ElectronAPI {
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
+    getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;
+    getCollectionItems: (args: { collectionId: number; page?: number }) => Promise<GameBananaCollectionItemsResponse>;
 
     // Mina Variants
     setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
@@ -357,6 +361,7 @@ export interface ElectronAPI {
     // Profiles
     getProfiles: () => Promise<Profile[]>;
     createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
     updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
     applyProfile: (profileId: string) => Promise<Profile>;
     deleteProfile: (profileId: string) => Promise<void>;
