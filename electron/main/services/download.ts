@@ -6,7 +6,7 @@ import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
 import { randomUUID } from 'crypto';
-import { setModMetadata } from './metadata';
+import { setModMetadata, getModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities, scanMods, disableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
@@ -742,13 +742,19 @@ async function executeDownload(
         try {
             const installedSet = new Set(installedVpks);
             const allMods = await scanMods(deadlockPath);
-            const stalePeers = allMods.filter(
-                (m) =>
-                    m.enabled &&
-                    m.gameBananaId === modId &&
-                    m.gameBananaFileId !== fileId &&
-                    !installedSet.has(m.fileName)
-            );
+            // scanMods returns filesystem state only; gameBananaId and
+            // gameBananaFileId live in the metadata sidecar (enriched at
+            // the IPC boundary by enrichMod). Read them per-mod here or the
+            // filter never matches and no sibling variants ever get disabled.
+            const stalePeers = allMods.filter((m) => {
+                if (!m.enabled) return false;
+                if (installedSet.has(m.fileName)) return false;
+                const meta = getModMetadata(m.fileName);
+                return (
+                    meta?.gameBananaId === modId &&
+                    meta?.gameBananaFileId !== fileId
+                );
+            });
             const disabledPeers: Array<{ id: string; name: string; fileName: string }> = [];
             for (const peer of stalePeers) {
                 console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);

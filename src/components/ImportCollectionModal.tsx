@@ -943,7 +943,7 @@ export default function ImportCollectionModal({
                   selected.size === 0 ||
                   !activeDeadlockPath ||
                   rows.length === 0 ||
-                  !rowsRef.current.some(
+                  !rows.some(
                     (r) => selected.has(r.item.id) && r.status === 'idle'
                   )
                 }

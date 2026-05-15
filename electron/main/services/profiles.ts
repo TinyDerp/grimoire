@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkS
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
 import { scanMods, enableMod, disableMod, setModPriority } from './mods';
+import { getModMetadata } from './metadata';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {
@@ -129,9 +130,11 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
  * profile contains ONLY the mods that were just imported, not every other
  * enabled mod in the user's library.
  *
- * Mods whose gameBananaId matches but aren't currently enabled are still
- * included with their actual enabled state preserved — so a user who
- * disables one mid-import gets that reflected in the profile.
+ * Mods are recorded as enabled=true regardless of their current filesystem
+ * state. The download pipeline installs new mods to the disabled folder,
+ * so capturing live state would save the profile with everything disabled.
+ * The user's intent in saving a collection as a profile is "make these the
+ * active set when I apply this", so we encode that explicitly.
  */
 export async function createProfileFromGameBananaIds(
     deadlockPath: string,
@@ -140,9 +143,14 @@ export async function createProfileFromGameBananaIds(
 ): Promise<Profile> {
     const idSet = new Set(gameBananaIds);
     const mods = await scanMods(deadlockPath);
-    const matching = mods.filter((mod) =>
-        mod.gameBananaId !== undefined && idSet.has(mod.gameBananaId)
-    );
+    // scanMods returns filesystem-only state. gameBananaId lives in the
+    // metadata sidecar (read at the IPC layer via enrichMod), so we look
+    // it up per-mod here. Without this the filter never matches and the
+    // profile saves zero mods.
+    const matching = mods.filter((mod) => {
+        const metadata = getModMetadata(mod.fileName);
+        return metadata?.gameBananaId !== undefined && idSet.has(metadata.gameBananaId);
+    });
 
     const autoexecData = readAutoexec(deadlockPath);
     const now = new Date().toISOString();
@@ -152,7 +160,7 @@ export async function createProfileFromGameBananaIds(
         name,
         mods: matching.map((mod) => ({
             fileName: mod.fileName,
-            enabled: mod.enabled,
+            enabled: true,
             priority: mod.priority,
         })),
         autoexecCommands: autoexecData.commands,
