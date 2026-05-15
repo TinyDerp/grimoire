@@ -17,6 +17,7 @@ import {
   Music,
   SlidersHorizontal,
   Power,
+  Library,
 } from 'lucide-react';
 import {
   browseMods,
@@ -41,6 +42,7 @@ import { DynamicSelect } from '../components/common/DynamicSelect';
 import { Button, Tag } from '../components/common/ui';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
+import ImportCollectionModal from '../components/ImportCollectionModal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 
 const DEFAULT_PER_PAGE = 20;
@@ -227,6 +229,7 @@ export default function Browse() {
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
+  const [collectionModalOpen, setCollectionModalOpen] = useState(false);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
@@ -1176,6 +1179,16 @@ export default function Browse() {
               </div>
             </div>
 
+            {/* Import Collection Icon Button */}
+            <button
+              type="button"
+              onClick={() => setCollectionModalOpen(true)}
+              className="h-10 w-10 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer"
+              title="Import GameBanana collection"
+            >
+              <Library className="w-5 h-5" />
+            </button>
+
             {/* Refresh Icon Button */}
             <button
               type="button"
@@ -1510,6 +1523,16 @@ export default function Browse() {
           dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
           onDownload={handleDownload}
+        />
+      )}
+
+      {collectionModalOpen && (
+        <ImportCollectionModal
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          installedIds={installedIds}
+          queuedIds={new Set(downloadQueue.map((q) => q.modId))}
+          activeDeadlockPath={activeDeadlockPath}
+          onClose={() => setCollectionModalOpen(false)}
         />
       )}
     </div>

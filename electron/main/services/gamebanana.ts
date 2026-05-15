@@ -105,6 +105,41 @@ export interface GameBananaModDetails {
     previewMedia?: GameBananaPreviewMedia;
 }
 
+export interface GameBananaCollection {
+    id: number;
+    name: string;
+    description?: string;
+    dateAdded: number;
+    dateModified: number;
+    submitter?: GameBananaSubmitter;
+    previewMedia?: GameBananaPreviewMedia;
+}
+
+export interface GameBananaCollectionItem {
+    id: number;
+    modelName: string;
+    name: string;
+    profileUrl: string;
+    dateAdded: number;
+    dateModified: number;
+    likeCount: number;
+    viewCount: number;
+    hasFiles: boolean;
+    nsfw: boolean;
+    gameId?: number;
+    gameName?: string;
+    submitter?: GameBananaSubmitter;
+    previewMedia?: GameBananaPreviewMedia;
+    rootCategory?: GameBananaCategory;
+}
+
+export interface GameBananaCollectionItemsResponse {
+    records: GameBananaCollectionItem[];
+    totalCount: number;
+    isComplete: boolean;
+    perPage: number;
+}
+
 // Raw API response types
 interface SectionRaw {
     _sPluralTitle: string;
@@ -208,6 +243,49 @@ interface ModDetailsRaw {
     _aFiles?: FileRaw[];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
     _aCategory?: ModRaw['_aRootCategory'];
+}
+
+interface CollectionRaw {
+    _idRow: number;
+    _sName: string;
+    _sDescription?: string;
+    _tsDateAdded: number;
+    _tsDateModified: number;
+    _aSubmitter?: ModRaw['_aSubmitter'];
+    _aPreviewMedia?: ModRaw['_aPreviewMedia'];
+}
+
+interface CollectionItemRaw {
+    _idRow: number;
+    _sModelName: string;
+    _sName: string;
+    _sProfileUrl: string;
+    _tsDateAdded: number;
+    _tsDateModified?: number;
+    _tsDateUpdated?: number;
+    _bHasFiles?: boolean;
+    _bHasContentRatings?: boolean;
+    _bIsNsfw?: boolean;
+    _nLikeCount?: number;
+    _nViewCount?: number;
+    _aSubmitter?: ModRaw['_aSubmitter'];
+    _aPreviewMedia?: ModRaw['_aPreviewMedia'];
+    _aRootCategory?: ModRaw['_aRootCategory'];
+    _aGame?: {
+        _idRow?: number;
+        _sName?: string;
+        _sProfileUrl?: string;
+        _sIconUrl?: string;
+    };
+}
+
+interface CollectionItemsResponseRaw {
+    _aRecords: CollectionItemRaw[];
+    _aMetadata: {
+        _nRecordCount: number;
+        _nPerpage: number;
+        _bIsComplete: boolean;
+    };
 }
 
 /**
@@ -522,5 +600,124 @@ export async function fetchModDetails(
                     : undefined,
             }
             : undefined,
+    };
+}
+
+function mapSubmitter(raw: ModRaw['_aSubmitter']): GameBananaSubmitter | undefined {
+    if (!raw) return undefined;
+    return {
+        id: raw._idRow,
+        name: raw._sName,
+        avatarUrl: raw._sAvatarUrl,
+    };
+}
+
+function mapPreviewMedia(raw: ModRaw['_aPreviewMedia']): GameBananaPreviewMedia | undefined {
+    if (!raw?._aImages && !raw?._aMetadata) return undefined;
+    return {
+        images: raw._aImages
+            ?.filter((img) => img && img._sBaseUrl)
+            .map((img) => ({
+                baseUrl: img._sBaseUrl,
+                file: img._sFile,
+                file220: img._sFile220,
+                file530: img._sFile530,
+            })),
+        metadata: raw._aMetadata ? { audioUrl: raw._aMetadata._sAudioUrl } : undefined,
+    };
+}
+
+/**
+ * Parse a collection identifier from either a numeric id or a GameBanana URL.
+ * Accepts "164637", "https://gamebanana.com/collections/164637", or trailing
+ * fragments/queries. Returns null on garbage so the UI can show a friendly error.
+ */
+export function parseCollectionId(input: string): number | null {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+
+    if (/^\d+$/.test(trimmed)) {
+        const n = Number(trimmed);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    }
+
+    try {
+        const url = new URL(trimmed);
+        if (!url.hostname.endsWith('gamebanana.com')) return null;
+        const match = url.pathname.match(/\/collections\/(\d+)/i);
+        if (!match) return null;
+        const n = Number(match[1]);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Fetch a collection's metadata (name, description, submitter, preview).
+ * Items live on a separate endpoint — see fetchCollectionItems.
+ */
+export async function fetchCollection(collectionId: number): Promise<GameBananaCollection> {
+    const url = `${GAMEBANANA_API_BASE}/Collection/${collectionId}?_csvProperties=_idRow,_sName,_sDescription,_aSubmitter,_aPreviewMedia,_tsDateAdded,_tsDateModified`;
+    console.log('[fetchCollection] URL:', url);
+    const raw = await fetchJson<CollectionRaw>(url);
+
+    return {
+        id: raw._idRow,
+        name: raw._sName,
+        description: raw._sDescription,
+        dateAdded: raw._tsDateAdded,
+        dateModified: raw._tsDateModified,
+        submitter: mapSubmitter(raw._aSubmitter),
+        previewMedia: mapPreviewMedia(raw._aPreviewMedia),
+    };
+}
+
+/**
+ * Fetch one page of collection items. The Items endpoint server-caps perPage
+ * at 15 regardless of the requested value, so callers paginate by incrementing
+ * `page` until `isComplete` is true.
+ */
+export async function fetchCollectionItems(
+    collectionId: number,
+    page = 1
+): Promise<GameBananaCollectionItemsResponse> {
+    const url = `${GAMEBANANA_API_BASE}/Collection/${collectionId}/Items?_nPage=${page}`;
+    console.log('[fetchCollectionItems] URL:', url);
+    const raw = await fetchJson<CollectionItemsResponseRaw>(url);
+
+    const records = (raw._aRecords ?? []).map<GameBananaCollectionItem>((item) => ({
+        id: item._idRow,
+        modelName: item._sModelName,
+        name: item._sName,
+        profileUrl: item._sProfileUrl,
+        dateAdded: item._tsDateAdded,
+        dateModified: item._tsDateModified ?? item._tsDateUpdated ?? item._tsDateAdded,
+        likeCount: item._nLikeCount ?? 0,
+        viewCount: item._nViewCount ?? 0,
+        hasFiles: item._bHasFiles ?? false,
+        // Items endpoint doesn't return _bIsNsfw; fall back to _bHasContentRatings
+        // (same heuristic used by mapMod for list endpoints).
+        nsfw: item._bIsNsfw ?? item._bHasContentRatings ?? false,
+        gameId: item._aGame?._idRow,
+        gameName: item._aGame?._sName,
+        submitter: mapSubmitter(item._aSubmitter),
+        previewMedia: mapPreviewMedia(item._aPreviewMedia),
+        rootCategory: item._aRootCategory
+            ? {
+                id: item._aRootCategory._idRow,
+                name: item._aRootCategory._sName,
+                modelName: item._aRootCategory._sModelName,
+                profileUrl: item._aRootCategory._sProfileUrl,
+                iconUrl: item._aRootCategory._sIconUrl,
+            }
+            : undefined,
+    }));
+
+    return {
+        records,
+        totalCount: raw._aMetadata._nRecordCount,
+        isComplete: raw._aMetadata._bIsComplete,
+        perPage: raw._aMetadata._nPerpage,
     };
 }

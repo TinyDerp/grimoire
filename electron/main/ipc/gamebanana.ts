@@ -6,10 +6,14 @@ import {
     fetchSubmissions,
     fetchModDetails,
     fetchModComments,
+    fetchCollection,
+    fetchCollectionItems,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaModsResponse,
     GameBananaModDetails,
+    GameBananaCollection,
+    GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
 import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, resolveSuspiciousFileDecision, resolveMultiVpkPick, DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
@@ -141,5 +145,24 @@ ipcMain.handle(
     'get-gamebanana-categories',
     async (_, args: GetCategoriesArgs): Promise<GameBananaCategoryNode[]> => {
         return fetchCategoryTree(args.categoryModelName);
+    }
+);
+
+// get-collection — metadata only
+ipcMain.handle(
+    'get-collection',
+    async (_, args: { collectionId: number }): Promise<GameBananaCollection> => {
+        return fetchCollection(args.collectionId);
+    }
+);
+
+// get-collection-items — one page (15 records, server-capped)
+ipcMain.handle(
+    'get-collection-items',
+    async (
+        _,
+        args: { collectionId: number; page?: number }
+    ): Promise<GameBananaCollectionItemsResponse> => {
+        return fetchCollectionItems(args.collectionId, args.page ?? 1);
     }
 );

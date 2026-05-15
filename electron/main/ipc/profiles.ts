@@ -3,6 +3,7 @@ import { loadSettings, saveSettings } from '../services/settings';
 import {
     loadProfiles,
     createProfile,
+    createProfileFromGameBananaIds,
     updateProfile,
     applyProfile,
     deleteProfile,
@@ -42,6 +43,22 @@ ipcMain.handle('create-profile', async (_, name: string, crosshairSettings?: Pro
 
     return profile;
 });
+
+// create-profile-from-gamebanana-ids — used by the collection import flow
+// to make a profile containing only the mods that were just imported.
+ipcMain.handle(
+    'create-profile-from-gamebanana-ids',
+    async (
+        _,
+        args: { name: string; gameBananaIds: number[] }
+    ): Promise<Profile> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        return createProfileFromGameBananaIds(deadlockPath, args.name, args.gameBananaIds);
+    }
+);
 
 // update-profile
 ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> => {

@@ -124,6 +124,50 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
 }
 
 /**
+ * Create a profile from a specific subset of installed mods, identified by
+ * GameBanana mod ids. Used by the collection import flow: the resulting
+ * profile contains ONLY the mods that were just imported, not every other
+ * enabled mod in the user's library.
+ *
+ * Mods whose gameBananaId matches but aren't currently enabled are still
+ * included with their actual enabled state preserved — so a user who
+ * disables one mid-import gets that reflected in the profile.
+ */
+export async function createProfileFromGameBananaIds(
+    deadlockPath: string,
+    name: string,
+    gameBananaIds: number[]
+): Promise<Profile> {
+    const idSet = new Set(gameBananaIds);
+    const mods = await scanMods(deadlockPath);
+    const matching = mods.filter((mod) =>
+        mod.gameBananaId !== undefined && idSet.has(mod.gameBananaId)
+    );
+
+    const autoexecData = readAutoexec(deadlockPath);
+    const now = new Date().toISOString();
+
+    const profile: Profile = {
+        id: generateProfileId(),
+        name,
+        mods: matching.map((mod) => ({
+            fileName: mod.fileName,
+            enabled: mod.enabled,
+            priority: mod.priority,
+        })),
+        autoexecCommands: autoexecData.commands,
+        createdAt: now,
+        updatedAt: now,
+    };
+
+    const profiles = loadProfiles();
+    profiles.push(profile);
+    saveProfiles(profiles);
+
+    return profile;
+}
+
+/**
  * Update an existing profile with current mod state
  * Only saves enabled mods - disabled mods are not included
  */
