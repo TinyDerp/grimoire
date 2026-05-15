@@ -282,6 +282,11 @@ export async function deleteMod(deadlockPath: string, modId: string): Promise<vo
     } catch {
         // Ignore errors when cleaning up related files
     }
+
+    // Metadata is keyed by fileName. If we leave it behind, the next mod that
+    // is assigned the same pakNN_dir.vpk slot will inherit the deleted mod's
+    // gameBananaId, thumbnail, category, etc. via setModMetadata's merge.
+    removeModMetadata(targetMod.fileName);
 }
 
 /**
