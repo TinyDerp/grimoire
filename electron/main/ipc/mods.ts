@@ -14,7 +14,7 @@ import {
     Mod,
 } from '../services/mods';
 import { getAddonsPath } from '../services/deadlock';
-import { getModMetadata, setModMetadata } from '../services/metadata';
+import { getModMetadata, setModMetadata, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 
 /**
@@ -77,6 +77,10 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
         return [];
     }
     const mods = await scanMods(deadlockPath);
+    // Self-heal users whose metadata.json still carries orphan entries from
+    // pre-fix deletes (issue #26). pruneOrphanMetadata is a no-op when there
+    // are none, so the steady-state cost is one JSON parse.
+    pruneOrphanMetadata(new Set(mods.map((m) => m.fileName)));
     return mods.map(enrichMod);
 });
 
@@ -313,6 +317,11 @@ ipcMain.handle(
             await fs.copyFile(vpkPath, join(addonsPath, newDirFileName));
         }
 
+        // Scrub any orphan metadata at this slot before writing. setModMetadata
+        // merges into the existing entry, so stale fields (gameBananaId,
+        // categoryName, etc.) from a prior occupant would otherwise stick to
+        // the new local mod and visually merge it with unrelated mods.
+        removeModMetadata(newDirFileName);
         setModMetadata(newDirFileName, {
             modName: name.trim(),
             thumbnailUrl: thumbnailDataUrl,

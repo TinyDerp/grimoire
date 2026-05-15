@@ -88,6 +88,27 @@ export function removeModMetadata(fileName: string): void {
 export const deleteModMetadata = removeModMetadata;
 
 /**
+ * Drop metadata entries whose VPK no longer exists on disk.
+ *
+ * Older versions of deleteMod removed the .vpk file but left metadata behind,
+ * keyed by fileName. When the next mod was assigned the same pakNN_dir.vpk
+ * slot, setModMetadata's merge behavior leaked the dead mod's gameBananaId,
+ * categoryName, thumbnail, etc. onto the new install (issue #26). Callers
+ * pass the current valid set so users with pre-existing orphans self-heal
+ * the next time the mods list is scanned.
+ */
+export function pruneOrphanMetadata(validFileNames: Set<string>): void {
+    const metadata = loadMetadata();
+    const orphans = Object.keys(metadata).filter((key) => !validFileNames.has(key));
+    if (orphans.length === 0) return;
+
+    for (const key of orphans) {
+        delete metadata[key];
+    }
+    saveMetadata(metadata);
+}
+
+/**
  * Atomically migrate metadata for a batch of rename operations.
  *
  * Why batched: when several mods are renamed in one operation (e.g. reorder),
