@@ -37,9 +37,16 @@ export default defineConfig(({ mode }) => {
         plugins: [
             externalizeDepsPlugin({
                 // @grimoire/social-types is a workspace package whose entrypoint is a
-                // .ts file shipped from source. The main process can't `require()` it
-                // at runtime, so bundle it. zod stays externalized (CJS, Node-loadable).
-                exclude: ['electron-updater', 'electron-log', '@grimoire/social-types'],
+                // .ts file shipped from source, so it must be bundled. zod is bundled
+                // alongside it because electron-builder.yml's files allowlist drops
+                // pure-JS node_modules, so any externalized prod dep would be missing
+                // from app.asar at runtime.
+                exclude: [
+                    'electron-updater',
+                    'electron-log',
+                    '@grimoire/social-types',
+                    'zod',
+                ],
             }),
         ],
         define: {
