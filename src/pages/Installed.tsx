@@ -1112,7 +1112,7 @@ export default function Installed() {
                   type="button"
                   onClick={fixOrder}
                   title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
-                  className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                  className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
                 >
                   Fix Order
                 </button>
