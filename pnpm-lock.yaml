@@ -14,6 +14,9 @@ importers:
       '@compai/font-unifraktur-maguntia':
         specifier: ^0.0.3
         version: 0.0.3
+      '@grimoire/social-types':
+        specifier: workspace:*
+        version: link:../grimoire-social/packages/social-types
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16
@@ -50,6 +53,9 @@ importers:
       react-router-dom:
         specifier: ^7.11.0
         version: 7.11.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
       zustand:
         specifier: ^5.0.9
         version: 5.0.9(@types/react@19.2.7)(react@19.2.3)
@@ -123,6 +129,12 @@ importers:
       vite:
         specifier: ^6.3.0
         version: 6.4.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)
+
+  ../grimoire-social/packages/social-types:
+    dependencies:
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
 
 packages:
 
@@ -2763,8 +2775,8 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  zod@4.2.1:
-    resolution: {integrity: sha512-0wZ1IRqGGhMP76gLqz8EyfBXKk0J2qo2+H3fi4mcUP/KtTocoX08nmIAHl1Z2kJIZbZee8KOpBCSNPRgauucjw==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zustand@5.0.9:
     resolution: {integrity: sha512-ALBtUj0AfjJt3uNRQoL1tL2tMvj6Gp/6e39dnfT6uzpelGru8v1tPOGBzayOWbPJvujM8JojDk3E1LxeFisBNg==}
@@ -4230,8 +4242,8 @@ snapshots:
       '@babel/parser': 7.28.5
       eslint: 9.39.2(jiti@2.6.1)
       hermes-parser: 0.25.1
-      zod: 4.2.1
-      zod-validation-error: 4.0.2(zod@4.2.1)
+      zod: 3.25.76
+      zod-validation-error: 4.0.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 
@@ -5602,11 +5614,11 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod-validation-error@4.0.2(zod@4.2.1):
+  zod-validation-error@4.0.2(zod@3.25.76):
     dependencies:
-      zod: 4.2.1
+      zod: 3.25.76
 
-  zod@4.2.1: {}
+  zod@3.25.76: {}
 
   zustand@5.0.9(@types/react@19.2.7)(react@19.2.3):
     optionalDependencies:

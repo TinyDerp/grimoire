@@ -11,6 +11,7 @@ import Crosshair from './pages/Crosshair';
 import Autoexec from './pages/Autoexec';
 import Stats from './pages/Stats';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { useSocialStore } from './stores/socialStore';
 
 export default function App() {
   // Swallow stray file drops so Electron doesn't navigate the window to the
@@ -23,6 +24,13 @@ export default function App() {
       window.removeEventListener('dragover', swallow);
       window.removeEventListener('drop', swallow);
     };
+  }, []);
+
+  // Pull the persisted social-session state into the renderer once at boot.
+  // Idempotent: subsequent callers are no-ops. The Profiles page's "Publish"
+  // button gate depends on this so it doesn't appear stale on first paint.
+  useEffect(() => {
+    void useSocialStore.getState().hydrate();
   }, []);
 
   return (

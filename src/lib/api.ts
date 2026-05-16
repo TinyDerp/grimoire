@@ -388,3 +388,86 @@ export async function finalizePortableImport(args: {
 }): Promise<Profile> {
   return window.electronAPI.finalizePortableImport(args);
 }
+
+// =====================
+// Grimoire Social API
+// =====================
+
+import type {
+  LikeResponse as SocialLikeResponse,
+  ListProfilesResponse as SocialListProfilesResponse,
+  MeResponse as SocialMeResponse,
+  ProfileDetail as SocialProfileDetail,
+  ProfileSort as SocialProfileSort,
+  PublishRequest as SocialPublishRequest,
+  PublishResponse as SocialPublishResponse,
+  ReportRequest as SocialReportRequest,
+} from '@grimoire/social-types';
+import type { SocialSessionStatus } from '../types/social';
+
+export type {
+  SocialLikeResponse,
+  SocialListProfilesResponse,
+  SocialMeResponse,
+  SocialProfileDetail,
+  SocialProfileSort,
+  SocialPublishRequest,
+  SocialPublishResponse,
+  SocialReportRequest,
+  SocialSessionStatus,
+};
+
+export async function getSocialSessionStatus(): Promise<SocialSessionStatus> {
+  return window.electronAPI.social.getSessionStatus();
+}
+
+export async function socialLogin(): Promise<SocialSessionStatus> {
+  return window.electronAPI.social.login();
+}
+
+export async function socialLogout(): Promise<SocialSessionStatus> {
+  return window.electronAPI.social.logout();
+}
+
+export async function socialMe(): Promise<SocialMeResponse> {
+  return window.electronAPI.social.me();
+}
+
+export async function socialListProfiles(args?: {
+  sort?: SocialProfileSort;
+  hero?: string;
+  hideNsfw?: boolean;
+  page?: number;
+}): Promise<SocialListProfilesResponse> {
+  return window.electronAPI.social.listProfiles(args);
+}
+
+export async function socialGetProfile(id: string): Promise<SocialProfileDetail> {
+  return window.electronAPI.social.getProfile(id);
+}
+
+export async function socialPublish(body: SocialPublishRequest): Promise<SocialPublishResponse> {
+  return window.electronAPI.social.publish(body);
+}
+
+export async function socialLike(id: string): Promise<SocialLikeResponse> {
+  return window.electronAPI.social.like(id);
+}
+
+export async function socialUnlike(id: string): Promise<SocialLikeResponse> {
+  return window.electronAPI.social.unlike(id);
+}
+
+export async function socialReport(id: string, body: SocialReportRequest): Promise<void> {
+  return window.electronAPI.social.report(id, body);
+}
+
+export async function socialDeleteAccount(): Promise<SocialSessionStatus> {
+  return window.electronAPI.social.deleteAccount();
+}
+
+export function socialOnSessionChanged(
+  callback: (status: SocialSessionStatus) => void
+): () => void {
+  return window.electronAPI.social.onSessionChanged(callback);
+}

@@ -18,6 +18,8 @@ import {
   SlidersHorizontal,
   Power,
   Library,
+  ChevronDown,
+  Upload,
 } from 'lucide-react';
 import {
   browseMods,
@@ -43,6 +45,7 @@ import { Button, Tag } from '../components/common/ui';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import ImportCollectionModal from '../components/ImportCollectionModal';
+import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 
 const DEFAULT_PER_PAGE = 20;
@@ -230,6 +233,9 @@ export default function Browse() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const [collectionModalOpen, setCollectionModalOpen] = useState(false);
+  const [importProfileOpen, setImportProfileOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const importMenuRef = useRef<HTMLDivElement>(null);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
@@ -254,6 +260,25 @@ export default function Browse() {
       window.removeEventListener('keydown', onKey);
     };
   }, [filtersOpen]);
+
+  // Close the import menu on outside click or Escape.
+  useEffect(() => {
+    if (!importMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (importMenuRef.current && !importMenuRef.current.contains(e.target as Node)) {
+        setImportMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setImportMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [importMenuOpen]);
 
   // Check if local cache is available for search
   const [hasLocalCache, setHasLocalCache] = useState(false);
@@ -1179,15 +1204,59 @@ export default function Browse() {
               </div>
             </div>
 
-            {/* Import Collection Icon Button */}
-            <button
-              type="button"
-              onClick={() => setCollectionModalOpen(true)}
-              className="h-10 w-10 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer"
-              title="Import GameBanana collection"
-            >
-              <Library className="w-5 h-5" />
-            </button>
+            {/* Import menu: GameBanana collection or portable profile. */}
+            <div className="relative" ref={importMenuRef}>
+              <button
+                type="button"
+                onClick={() => setImportMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={importMenuOpen}
+                className="h-10 flex items-center justify-center gap-1 pl-2.5 pr-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                title="Import"
+              >
+                <Library className="w-5 h-5" />
+                <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              </button>
+
+              {importMenuOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 z-20 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
+                  role="menu"
+                  aria-label="Import"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImportMenuOpen(false);
+                      setCollectionModalOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                  >
+                    <Library className="w-4 h-4 text-text-secondary shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span>GameBanana Collection</span>
+                      <span className="text-[11px] text-text-secondary truncate">Import items from a collection URL</span>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setImportMenuOpen(false);
+                      setImportProfileOpen(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 text-text-secondary shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <span>Grimoire Profile</span>
+                      <span className="text-[11px] text-text-secondary truncate">Share code or .modprofile.json from the Profiles tab</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Refresh Icon Button */}
             <button
@@ -1533,6 +1602,15 @@ export default function Browse() {
           queuedIds={new Set(downloadQueue.map((q) => q.modId))}
           activeDeadlockPath={activeDeadlockPath}
           onClose={() => setCollectionModalOpen(false)}
+        />
+      )}
+
+      {importProfileOpen && (
+        <ImportProfileDialog
+          activeDeadlockPath={activeDeadlockPath}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          onClose={() => setImportProfileOpen(false)}
+          onImported={() => { void loadMods(); }}
         />
       )}
     </div>

@@ -415,6 +415,34 @@ export interface ElectronAPI {
         onStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
 
+    // Grimoire Social
+    social: {
+        getSessionStatus: () => Promise<import('./social').SocialSessionStatus>;
+        login: () => Promise<import('./social').SocialSessionStatus>;
+        logout: () => Promise<import('./social').SocialSessionStatus>;
+        me: () => Promise<import('@grimoire/social-types').MeResponse>;
+        listProfiles: (args?: {
+            sort?: import('@grimoire/social-types').ProfileSort;
+            hero?: string;
+            hideNsfw?: boolean;
+            page?: number;
+        }) => Promise<import('@grimoire/social-types').ListProfilesResponse>;
+        getProfile: (id: string) => Promise<import('@grimoire/social-types').ProfileDetail>;
+        publish: (
+            body: import('@grimoire/social-types').PublishRequest
+        ) => Promise<import('@grimoire/social-types').PublishResponse>;
+        like: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;
+        unlike: (id: string) => Promise<import('@grimoire/social-types').LikeResponse>;
+        report: (
+            id: string,
+            body: import('@grimoire/social-types').ReportRequest
+        ) => Promise<void>;
+        deleteAccount: () => Promise<import('./social').SocialSessionStatus>;
+        onSessionChanged: (
+            callback: (status: import('./social').SocialSessionStatus) => void
+        ) => () => void;
+    };
+
     // Stats API
     stats: {
         // Steam Detection

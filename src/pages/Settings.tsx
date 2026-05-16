@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
@@ -16,6 +16,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
+import SocialAccountSection from '../components/social/SocialAccountSection';
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
@@ -765,6 +766,11 @@ export default function Settings() {
               )}
             </div>
           </div>
+        </Card>
+
+        {/* Grimoire Social */}
+        <Card title="Grimoire Social" icon={Globe} className="lg:col-span-2">
+          <SocialAccountSection />
         </Card>
 
         {/* Experimental Features */}

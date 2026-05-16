@@ -5,6 +5,17 @@ import type {
     PortableResolutionReport,
     PortableResolvedMod,
 } from '../../src/types/portableProfile';
+import type { SocialSessionStatus } from '../../src/types/social';
+import type {
+    LikeResponse,
+    ListProfilesResponse,
+    MeResponse,
+    ProfileDetail,
+    ProfileSort,
+    PublishRequest,
+    PublishResponse,
+    ReportRequest,
+} from '@grimoire/social-types';
 
 // Type definitions for the exposed API
 export interface ElectronAPI {
@@ -155,6 +166,28 @@ export interface ElectronAPI {
         downloadUpdate: () => Promise<void>;
         installUpdate: () => void;
         onStatus: (callback: (status: UpdateStatus) => void) => () => void;
+    };
+
+    // Grimoire Social (publish + discover + likes). Session token lives in
+    // the main process; this surface never returns it to the renderer.
+    social: {
+        getSessionStatus: () => Promise<SocialSessionStatus>;
+        login: () => Promise<SocialSessionStatus>;
+        logout: () => Promise<SocialSessionStatus>;
+        me: () => Promise<MeResponse>;
+        listProfiles: (args?: {
+            sort?: ProfileSort;
+            hero?: string;
+            hideNsfw?: boolean;
+            page?: number;
+        }) => Promise<ListProfilesResponse>;
+        getProfile: (id: string) => Promise<ProfileDetail>;
+        publish: (body: PublishRequest) => Promise<PublishResponse>;
+        like: (id: string) => Promise<LikeResponse>;
+        unlike: (id: string) => Promise<LikeResponse>;
+        report: (id: string, body: ReportRequest) => Promise<void>;
+        deleteAccount: () => Promise<SocialSessionStatus>;
+        onSessionChanged: (callback: (status: SocialSessionStatus) => void) => () => void;
     };
 
     // Stats
@@ -917,6 +950,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
             const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
             ipcRenderer.on('updater:status', handler);
             return () => ipcRenderer.removeListener('updater:status', handler);
+        },
+    },
+
+    // Grimoire Social
+    social: {
+        getSessionStatus: () => ipcRenderer.invoke('social:getSessionStatus'),
+        login: () => ipcRenderer.invoke('social:login'),
+        logout: () => ipcRenderer.invoke('social:logout'),
+        me: () => ipcRenderer.invoke('social:me'),
+        listProfiles: (args?: {
+            sort?: ProfileSort;
+            hero?: string;
+            hideNsfw?: boolean;
+            page?: number;
+        }) => ipcRenderer.invoke('social:listProfiles', args ?? {}),
+        getProfile: (id: string) => ipcRenderer.invoke('social:getProfile', id),
+        publish: (body: PublishRequest) => ipcRenderer.invoke('social:publish', body),
+        like: (id: string) => ipcRenderer.invoke('social:like', id),
+        unlike: (id: string) => ipcRenderer.invoke('social:unlike', id),
+        report: (id: string, body: ReportRequest) =>
+            ipcRenderer.invoke('social:report', { id, body }),
+        deleteAccount: () => ipcRenderer.invoke('social:deleteAccount'),
+        onSessionChanged: (callback: (status: SocialSessionStatus) => void) => {
+            const handler = (_event: Electron.IpcRendererEvent, status: SocialSessionStatus) =>
+                callback(status);
+            ipcRenderer.on('social:session-changed', handler);
+            return () => ipcRenderer.removeListener('social:session-changed', handler);
         },
     },
 

@@ -8,6 +8,11 @@ import {
     handleOneClickInstall,
     parseGrimoireUrl,
 } from './services/oneClickInstall';
+import {
+    handleProtocolAuthCallback,
+    hydrateOnBoot as hydrateSocialSession,
+    isGrimoireAuthUrl,
+} from './services/socialAuth';
 
 // Stop Electron from registering with the Windows media session / hardware
 // media key stack. We never use transport controls, but opting in makes Win11
@@ -30,6 +35,7 @@ import './ipc/crosshairPresets';
 import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';
+import './ipc/social';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
@@ -163,9 +169,13 @@ if (!gotTheLock) {
 
         const url = findGrimoireUrlInArgv(argv);
         if (url) {
-            const parsed = parseGrimoireUrl(url);
-            if (parsed) {
-                void handleOneClickInstall(parsed, mainWindow);
+            if (isGrimoireAuthUrl(url)) {
+                void handleProtocolAuthCallback(url);
+            } else {
+                const parsed = parseGrimoireUrl(url);
+                if (parsed) {
+                    void handleOneClickInstall(parsed, mainWindow);
+                }
             }
         }
     });
@@ -192,7 +202,12 @@ if (!gotTheLock) {
                             "font-src 'self' https://fonts.gstatic.com; " +
                             "img-src 'self' data: https: blob:; " +
                             "media-src 'self' https:; " +
-                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com"
+                            // Social fetches happen from the main process (fetch in Node),
+                            // not the renderer, so they bypass CSP. The `https://*.workers.dev`
+                            // entry is here so any future renderer-side asset (e.g. avatar URL
+                            // not on Steam's CDN) doesn't trip CSP unexpectedly. Update when a
+                            // dedicated grimoire-social production domain is locked.
+                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com https://*.workers.dev"
                         ]
                     }
                 });
@@ -204,15 +219,24 @@ if (!gotTheLock) {
         // If we were launched via a `grimoire:` URL, dispatch it once the
         // renderer is ready so the UI can navigate + show a toast before the
         // download begins. webContents.once handles both cold-launch and
-        // hot-reload paths cleanly.
+        // hot-reload paths cleanly. Auth callbacks take precedence over the
+        // one-click installer dispatch.
         if (initialProtocolUrl && mainWindow) {
-            const parsedInitial = parseGrimoireUrl(initialProtocolUrl);
-            if (parsedInitial) {
-                mainWindow.webContents.once('did-finish-load', () => {
-                    void handleOneClickInstall(parsedInitial, mainWindow);
-                });
+            if (isGrimoireAuthUrl(initialProtocolUrl)) {
+                void handleProtocolAuthCallback(initialProtocolUrl);
+            } else {
+                const parsedInitial = parseGrimoireUrl(initialProtocolUrl);
+                if (parsedInitial) {
+                    mainWindow.webContents.once('did-finish-load', () => {
+                        void handleOneClickInstall(parsedInitial, mainWindow);
+                    });
+                }
             }
         }
+
+        // Restore a previously-persisted social session (no-op if none, or if
+        // we're on Linux without a real secret store — ADR-011).
+        void hydrateSocialSession();
 
         // Recover from any half-finished vanilla launch (app was closed mid-session,
         // or grimoire crashed while the user was playing vanilla). Runs in background.

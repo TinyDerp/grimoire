@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2 } from 'lucide-react';
+import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe } from 'lucide-react';
 import {
   getProfiles,
   createProfile,
@@ -13,11 +13,13 @@ import type { Profile, ProfileCrosshairSettings } from '../lib/api';
 import type { AppSettings } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
+import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button } from '../components/common/ui';
 import { ConfirmModal, EmptyState, PageHeader } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
+import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import type { Mod } from '../types/mod';
 
@@ -98,10 +100,12 @@ export default function Profiles() {
   const [renameValue, setRenameValue] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
   const [exportingProfileId, setExportingProfileId] = useState<string | null>(null);
+  const [publishingProfileId, setPublishingProfileId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
 
   const { mods, loadMods } = useAppStore();
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
+  const socialSignedIn = useSocialStore((s) => s.status.signedIn);
 
   const modByFileName = new Map(mods.map(m => [m.fileName, m]));
 
@@ -431,6 +435,17 @@ export default function Profiles() {
                           title="Export / share profile"
                           className="px-1.5"
                         />
+                        {socialSignedIn && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setPublishingProfileId(profile.id)}
+                            disabled={isApplying || isUpdating}
+                            icon={Globe}
+                            title="Publish to Discover"
+                            className="px-1.5"
+                          />
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"
@@ -550,6 +565,14 @@ export default function Profiles() {
           profileId={exportingProfileId}
           profileName={profiles.find((p) => p.id === exportingProfileId)?.name ?? ''}
           onClose={() => setExportingProfileId(null)}
+        />
+      )}
+
+      {publishingProfileId && (
+        <PublishDialog
+          profileId={publishingProfileId}
+          profileName={profiles.find((p) => p.id === publishingProfileId)?.name ?? ''}
+          onClose={() => setPublishingProfileId(null)}
         />
       )}
 

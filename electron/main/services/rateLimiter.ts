@@ -74,3 +74,12 @@ export const statsApiRateLimiter = new RateLimiter({
     maxRequestsPerSecond: 5,
     burstSize: 10,
 });
+
+// Grimoire Social API rate limiter: 5 requests per second.
+// Defensive client-side throttle. The worker enforces strict per-action
+// limits (publish 1/10min via DO, like 30/min via RL API, etc.) on its
+// own; this just smooths bursts so a frantic UI doesn't spam the edge.
+export const socialApiRateLimiter = new RateLimiter({
+    maxRequestsPerSecond: 5,
+    burstSize: 10,
+});

@@ -282,7 +282,7 @@ export default function ImportProfileDialog({
               Import Profile
             </h2>
             <p className="text-sm text-text-secondary mt-1">
-              Paste a share code or load a .modprofile.json file.
+              Paste a share code or load a .modprofile.json file exported from Grimoire's Profiles tab. This format is Grimoire-only and not compatible with other mod managers.
             </p>
           </div>
           <button
