@@ -166,15 +166,44 @@ export async function buildPortableProfile(
 
     const installed = await scanMods(deadlockPath);
     const modByFileName = new Map(installed.map((m) => [m.fileName, m]));
+    // Resolve profile mods to live installed mods by stable id first, mirroring
+    // applyProfile's resolver (see profiles.ts buildProfileModResolver). Without
+    // this, a re-share after switching profiles loses every mod whose pakNN_
+    // prefix shifted via reorderMods: the saved profileMod.fileName no longer
+    // matches anything on disk, so both modByFileName and getModMetadata return
+    // undefined and the export warns "Skipped local mod" for known GameBanana
+    // installs.
+    const modByGbFile = new Map<string, typeof installed[number]>();
+    for (const m of installed) {
+        const meta = getModMetadata(m.fileName);
+        if (typeof meta?.gameBananaId === 'number' && typeof meta?.gameBananaFileId === 'number') {
+            const key = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
+            if (!modByGbFile.has(key)) modByGbFile.set(key, m);
+        }
+    }
 
     const mods: PortableModEntry[] = [];
     const warnings: string[] = [];
 
     for (const profileMod of profile.mods) {
-        const installedMod = modByFileName.get(profileMod.fileName);
-        const metadata = getModMetadata(profileMod.fileName);
-        const gbId = metadata?.gameBananaId ?? installedMod?.gameBananaId;
-        const fileId = metadata?.gameBananaFileId ?? installedMod?.gameBananaFileId;
+        const stableKey =
+            typeof profileMod.gameBananaId === 'number' &&
+            typeof profileMod.gameBananaFileId === 'number'
+                ? `${profileMod.gameBananaId}:${profileMod.gameBananaFileId}`
+                : null;
+        const installedMod =
+            (stableKey ? modByGbFile.get(stableKey) : undefined) ??
+            modByFileName.get(profileMod.fileName);
+        const metadataFileName = installedMod?.fileName ?? profileMod.fileName;
+        const metadata = getModMetadata(metadataFileName);
+        const gbId =
+            profileMod.gameBananaId ??
+            metadata?.gameBananaId ??
+            installedMod?.gameBananaId;
+        const fileId =
+            profileMod.gameBananaFileId ??
+            metadata?.gameBananaFileId ??
+            installedMod?.gameBananaFileId;
 
         if (!gbId || !fileId) {
             const label =
@@ -191,7 +220,7 @@ export async function buildPortableProfile(
             metadata?.sourceFileName ||
             undefined;
 
-        const vpkStem = vpkStemOf(profileMod.fileName);
+        const vpkStem = vpkStemOf(installedMod?.fileName ?? profileMod.fileName);
         mods.push({
             source: 'gamebanana',
             ref: {
@@ -500,10 +529,17 @@ export async function createProfileFromPortable(
         if (claimedVariants.has(fileName)) continue;
         claimedVariants.add(fileName);
 
+        // Persist the stable GameBanana ids alongside the fileName so
+        // applyProfile / buildPortableProfile can find this mod after a
+        // later reorder rotates its pakNN_ prefix. Without these, imported
+        // and snapshot-restored profiles regress to fileName-only lookups
+        // and re-export warns "Skipped local mod" the moment files move.
         profileMods.push({
             fileName,
             enabled: r.entry.enabled,
             priority: r.entry.priority,
+            gameBananaId: ref.submissionId,
+            gameBananaFileId: r.resolvedFileId,
         });
     }
 

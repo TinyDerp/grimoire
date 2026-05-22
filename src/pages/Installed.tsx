@@ -30,7 +30,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, UnknownModFilterGuess } from '../types/mod';
@@ -1164,22 +1164,32 @@ export default function Installed() {
         }
       }
 
-      await Promise.all(
-        Array.from(uniqueIds.entries()).map(async ([gbId, section]) => {
-          if (updateCheckCache.has(gbId)) return;
+      // Cap concurrency. An unbounded Promise.all here bursts N parallel
+      // requests through the rate limiter and pins ~N JSON payloads in
+      // renderer memory; with 70+ installed mods that visibly stalls the
+      // page on mount. The slim getModFileList only pulls _idRow + _aFiles.
+      const queue = Array.from(uniqueIds.entries()).filter(
+        ([gbId]) => !updateCheckCache.has(gbId),
+      );
+      let cursor = 0;
+      const worker = async () => {
+        while (!cancelled) {
+          const idx = cursor++;
+          if (idx >= queue.length) return;
+          const [gbId, section] = queue[idx];
           try {
-            const details = await getModDetails(gbId, section);
+            const list = await getModFileList(gbId, section);
             const liveIds = new Set(
-              (details.files ?? [])
-                .filter((f) => !f.isArchived)
-                .map((f) => f.id),
+              list.files.filter((f) => !f.isArchived).map((f) => f.id),
             );
             updateCheckCache.set(gbId, liveIds.size > 0 ? liveIds : null);
           } catch {
             // Network or API failure: leave uncached so a later mount retries.
           }
-        }),
-      );
+        }
+      };
+      const concurrency = Math.min(5, queue.length);
+      await Promise.all(Array.from({ length: concurrency }, worker));
 
       if (cancelled) return;
       const available = new Set<string>();
@@ -2862,6 +2872,7 @@ interface ModCardProps {
     nsfw?: boolean;
     gameBananaId?: number;
     isUnknown?: boolean;
+    lockerHero?: string;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
@@ -2945,8 +2956,11 @@ function ModCard({
   const variantStatusTitle = group
     ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
+  // Prefer the persisted lockerHero (set by VPK content inference at
+  // download/scan time, more accurate than the title) and fall back to
+  // title matching for any Sound mod that hasn't been enriched yet.
   const listHeroName = viewMode === 'list' && mod.sourceSection === 'Sound'
-    ? inferHeroFromTitle(mod.name)
+    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
     : null;
   const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
   const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
@@ -3123,10 +3137,11 @@ function ModCard({
         );
 
         if (isSoundCard) {
-          // Match Browse's Sound section: infer the hero from the mod title
-          // and reuse the locker render so the card carries the same hero
-          // art the user saw when they downloaded it.
-          const inferredHero = inferHeroFromTitle(mod.name);
+          // Prefer mod.lockerHero (persisted from VPK path inference: catches
+          // mods like "We don't talk Animal" whose title doesn't name the
+          // hero but whose VPK ships sounds/abilities/werewolf/*). Fall back
+          // to title matching for not-yet-enriched mods.
+          const inferredHero = mod.lockerHero ?? inferHeroFromTitle(mod.name);
           const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : null;
           const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 50;
           return (

@@ -49,6 +49,7 @@ export interface ElectronAPI {
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -74,6 +75,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -116,6 +118,7 @@ export interface ElectronAPI {
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
+    cancelActiveDownload: () => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler
@@ -492,7 +495,7 @@ interface DownloadEventData {
 interface DownloadErrorData {
     modId: number;
     fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
 }
@@ -551,6 +554,11 @@ interface GameBananaModDetails {
     category?: unknown;
     files?: unknown[];
     previewMedia?: unknown;
+}
+
+interface GameBananaModFileList {
+    id: number;
+    files: Array<{ id: number; isArchived: boolean }>;
 }
 
 interface GameBananaSection {
@@ -760,6 +768,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
+    setModLockerHero: (modId: string, heroName: string | null) =>
+        ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -795,6 +805,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
+    getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
@@ -860,6 +871,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
     getCurrentDownload: () => ipcRenderer.invoke('get-current-download'),
     removeFromQueue: (modId: number) => ipcRenderer.invoke('remove-from-queue', modId),
+    cancelActiveDownload: () => ipcRenderer.invoke('cancel-active-download'),
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);

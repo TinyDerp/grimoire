@@ -11,6 +11,7 @@ import type {
 import type {
     GameBananaModsResponse,
     GameBananaModDetails,
+    GameBananaModFileList,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaCollection,
@@ -131,7 +132,7 @@ export interface DownloadEventData {
 export interface DownloadErrorData {
     modId: number;
     fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
 }
@@ -287,6 +288,7 @@ export interface ElectronAPI {
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -312,6 +314,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -353,6 +356,7 @@ export interface ElectronAPI {
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
+    cancelActiveDownload: () => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler
