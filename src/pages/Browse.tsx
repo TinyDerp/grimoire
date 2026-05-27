@@ -1,9 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
+  Check,
   Search,
   Loader2,
   Download,
   Eye,
+  History,
   ThumbsUp,
   X,
   Volume2,
@@ -54,6 +56,7 @@ import ModDetailsModal from '../components/ModDetailsModal';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -117,6 +120,289 @@ function formatCount(n: number | null | undefined): string {
   if (value < 10_000) return `${(value / 1000).toFixed(1)}k`;
   if (value < 1_000_000) return `${Math.round(value / 1000)}k`;
   return `${(value / 1_000_000).toFixed(1)}m`;
+}
+
+type BrowseReadableChipTone = 'neutral' | 'accent' | 'danger' | 'info';
+
+type BrowseReadableChip = {
+  label: string;
+  tone?: BrowseReadableChipTone;
+};
+
+const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
+const BROWSE_READABLE_CHIP_GAP_WIDTH = 6;
+const BROWSE_READABLE_CHIP_OVERFLOW_WIDTH = 30;
+
+function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
+  switch (tone) {
+    case 'accent':
+      return 'border-accent/15 bg-accent/[0.045] text-accent/75';
+    case 'danger':
+      return 'border-state-danger/25 bg-state-danger/[0.07] text-state-danger/85';
+    case 'info':
+      return 'border-state-info/15 bg-state-info/[0.045] text-state-info/75';
+    default:
+      return 'border-white/[0.08] bg-white/[0.028] text-text-tertiary';
+  }
+}
+
+function normalizeReadableChipLabel(label: string | undefined): string | null {
+  const cleaned = label?.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+
+  const lower = cleaned.toLowerCase();
+  if (lower === 'skins') return 'Skin';
+  if (lower === 'sounds') return 'Sound';
+  if (lower === 'mods') return 'Mod';
+  if (lower === 'hud' || lower === 'huds') return 'HUD';
+  if (lower === 'ui') return 'UI';
+  return cleaned;
+}
+
+function addReadableChip(chips: BrowseReadableChip[], label: string | undefined, tone?: BrowseReadableChipTone) {
+  const normalized = normalizeReadableChipLabel(label);
+  if (!normalized) return;
+
+  const exists = chips.some((chip) => chip.label.toLowerCase() === normalized.toLowerCase());
+  if (!exists) chips.push({ label: normalized, tone });
+}
+
+function getReadableCardChips(mod: GameBananaMod, section: string, inferredHero: string | null): BrowseReadableChip[] {
+  const chips: BrowseReadableChip[] = [];
+  const isSoundSection = section === 'Sound';
+  const categoryLabel = mod.rootCategory?.name ?? section;
+
+  addReadableChip(chips, categoryLabel, isSoundSection ? 'accent' : 'neutral');
+  if (inferredHero) addReadableChip(chips, inferredHero, 'info');
+  if (isSoundSection) addReadableChip(chips, 'Audio', 'neutral');
+  if (mod.nsfw) addReadableChip(chips, '18+', 'danger');
+
+  return chips;
+}
+
+function estimateReadableChipWidth(label: string): number {
+  return Math.ceil(label.length * 5.5 + 14);
+}
+
+function BrowseReadableChipRow({ chips, availableWidth }: { chips: BrowseReadableChip[]; availableWidth: number }) {
+  const visibleChips: BrowseReadableChip[] = [];
+  let usedWidth = 0;
+  const rowWidth = Math.max(48, availableWidth);
+
+  for (const [index, chip] of chips.entries()) {
+    if (visibleChips.length >= BROWSE_READABLE_MAX_VISIBLE_CHIPS) break;
+
+    const remainingAfter = chips.length - index - 1;
+    const chipWidth = estimateReadableChipWidth(chip.label);
+    const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
+    const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
+
+    if (usedWidth + gapBefore + chipWidth + overflowReserve > rowWidth) break;
+
+    visibleChips.push(chip);
+    usedWidth += gapBefore + chipWidth;
+  }
+
+  const hiddenChips = chips.slice(visibleChips.length);
+
+  return (
+    <div className="flex min-h-6 min-w-0 items-start gap-1.5 overflow-hidden">
+      {visibleChips.map((chip, index) => (
+        <span
+          key={`${chip.label}-${index}`}
+          title={chip.label}
+          className={`inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-sm border px-1.5 text-[10px] font-medium leading-none ${readableChipTone(
+            chip.tone
+          )}`}
+        >
+          {chip.label}
+        </span>
+      ))}
+      {hiddenChips.length > 0 && (
+        <span
+          title={hiddenChips.map((chip) => chip.label).join(', ')}
+          className="inline-flex h-5 shrink-0 items-center rounded-sm border border-white/[0.08] bg-white/[0.028] px-1.5 text-[10px] font-medium leading-none text-text-tertiary"
+        >
+          +{hiddenChips.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function gameBananaTimestampToIso(timestamp: number | undefined): string | null {
+  if (!timestamp || timestamp <= 0) return null;
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function BrowseFreshnessLabel({ timestamp }: { timestamp: number }) {
+  const iso = gameBananaTimestampToIso(timestamp);
+
+  if (!iso) {
+    return <span className="mt-0.5 block h-3.5" aria-hidden="true" />;
+  }
+
+  const relative = formatRelativeDate(iso).replace(/(\d+)\s+(mo|yr)\s+ago/g, '$1$2 ago');
+  const absolute = formatAbsoluteDate(iso);
+
+  if (!relative || !absolute) {
+    return <span className="mt-0.5 block h-3.5" aria-hidden="true" />;
+  }
+
+  return (
+    <span
+      className="mt-0.5 inline-flex h-3.5 shrink-0 items-center gap-0.5 text-[10px] font-medium leading-[11px] tabular-nums text-text-tertiary/60"
+      title={`Last updated on GameBanana: ${absolute}`}
+    >
+      <History className="h-3 w-3 shrink-0 -translate-y-0.5" />
+      <span className="leading-[11px]">{relative}</span>
+    </span>
+  );
+}
+
+function BrowseReadableStatsRow({ mod }: { mod: GameBananaMod }) {
+  return (
+    <div className="flex h-4 min-w-0 items-end gap-1.5 overflow-visible text-[10px] font-medium leading-[11px] text-text-tertiary/60">
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.likeCount ?? 0} likes`}>
+        <ThumbsUp className="block h-3 w-3 shrink-0 -translate-y-0.5" />
+        <span className="block h-[11px] leading-[11px]">{formatCount(mod.likeCount)}</span>
+      </span>
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.viewCount ?? 0} views`}>
+        <Eye className="block h-3 w-3 shrink-0" />
+        <span className="block h-[11px] leading-[11px]">{formatCount(mod.viewCount)}</span>
+      </span>
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.downloadCount ?? 0} downloads`}>
+        <Download className="block h-3 w-3 shrink-0 -translate-y-0.5" />
+        <span className="block h-[11px] leading-[11px]">{formatCount(mod.downloadCount)}</span>
+      </span>
+    </div>
+  );
+}
+
+function BrowseSoundPlaceholder({ title }: { title: string }) {
+  const bars = [22, 38, 54, 30, 68, 46, 34, 58, 26, 42, 62, 36, 48, 28];
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_24%_22%,rgba(249,115,22,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(96,165,250,0.16),transparent_28%),linear-gradient(135deg,#151312,#22242a_55%,#121416)]"
+      role="img"
+      aria-label={`${title} audio preview`}
+    >
+      <Volume2 className="absolute left-1/2 top-[43%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-text-primary/12" />
+      <div className="absolute inset-x-8 top-[46%] flex h-12 -translate-y-1/2 items-center justify-center gap-1.5 opacity-35">
+        {bars.map((height, index) => (
+          <span
+            key={`${title}-wave-${index}`}
+            className="w-1 rounded-full bg-text-secondary"
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-bg-primary/55 to-transparent" />
+    </div>
+  );
+}
+
+function BrowseReadableAction({
+  modName,
+  installed,
+  installedDisabled,
+  downloading,
+  queuePosition,
+  onQuickDownload,
+  onEnable,
+}: {
+  modName: string;
+  installed: boolean;
+  installedDisabled?: boolean;
+  downloading: boolean;
+  queuePosition?: number;
+  onQuickDownload: () => void;
+  onEnable?: () => void;
+}) {
+  const actionableEnable = installed && installedDisabled && !!onEnable;
+  const action = actionableEnable
+    ? 'enable'
+    : installed
+      ? 'installed'
+      : downloading
+        ? 'downloading'
+        : queuePosition
+          ? 'queued'
+          : 'install';
+  const label =
+    action === 'enable'
+      ? 'Enable'
+      : action === 'installed'
+        ? 'Installed'
+        : action === 'downloading'
+          ? 'Loading'
+          : action === 'queued'
+            ? `Queued ${queuePosition}`
+            : 'Install';
+  const tone =
+    action === 'installed'
+      ? 'border-state-success/30 bg-state-success/[0.055] text-state-success'
+      : action === 'queued'
+        ? 'border-state-info/30 bg-state-info/[0.055] text-state-info'
+        : action === 'downloading'
+          ? 'border-accent/30 bg-accent/[0.055] text-accent'
+          : action === 'enable'
+            ? 'border-state-success/30 bg-state-success/[0.055] text-state-success hover:border-state-success/50'
+            : 'border-accent/30 bg-accent/[0.055] text-accent hover:border-accent/50';
+  const className = `inline-flex h-7 w-[98px] shrink-0 items-center justify-center rounded-md border px-[9px] text-xs font-semibold leading-none transition-colors ${tone}`;
+  const icon =
+    action === 'downloading' ? (
+      <Loader2 className="block h-[13px] w-[13px] shrink-0 animate-spin" />
+    ) : action === 'installed' || action === 'enable' ? (
+      <Check className="block h-[13px] w-[13px] shrink-0" />
+    ) : action === 'queued' ? (
+      <Clock className="block h-[13px] w-[13px] shrink-0" />
+    ) : (
+      <Download className="block h-[13px] w-[13px] shrink-0 -translate-y-0.5" />
+    );
+  const content = (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {icon}
+      <span className="min-w-0 truncate leading-none">{label}</span>
+    </span>
+  );
+
+  if (action === 'install') {
+    return (
+      <button
+        type="button"
+        onClick={(event) => { event.stopPropagation(); onQuickDownload(); }}
+        className={`${className} cursor-pointer`}
+        title={`Install ${modName}`}
+        aria-label={`Install ${modName}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  if (action === 'enable' && onEnable) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => { event.stopPropagation(); onEnable(); }}
+        className={`${className} cursor-pointer`}
+        title="Enable this mod (currently in your disabled folder)"
+        aria-label={`Enable ${modName}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span className={`${className} cursor-default`} title={label} aria-label={`${label} ${modName}`}>
+      {content}
+    </span>
+  );
 }
 
 // Treat Enter/Space as a click on role="button" divs (keyboard navigation).
@@ -265,8 +551,8 @@ export default function Browse() {
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const [browseCardDesign, setBrowseCardDesignState] = useState<BrowseCardDesign>(() => {
-    if (typeof window === 'undefined') return 'classic';
-    return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'readable' ? 'readable' : 'classic';
+    if (typeof window === 'undefined') return 'readable';
+    return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'classic' ? 'classic' : 'readable';
   });
   const setBrowseCardDesign = useCallback((design: BrowseCardDesign) => {
     setBrowseCardDesignState(design);
@@ -1785,6 +2071,7 @@ export default function Browse() {
                     queuePosition={isQueued ? queueIndex + 1 : undefined}
                     viewMode={viewMode}
                     cardDesign={browseCardDesign}
+                    cardSize={cardSize}
                     section={section}
                     volume={soundVolume}
                     onVolumeChange={setSoundVolume}
@@ -1880,9 +2167,9 @@ function ReadableBrowseModCard({
   downloading,
   queuePosition,
   viewMode,
+  cardSize,
   section,
   volume,
-  onVolumeChange,
   hideNsfwPreviews,
   isPlaying,
   onPlayingChange,
@@ -1895,40 +2182,53 @@ function ReadableBrowseModCard({
   const isCompact = viewMode === 'compact';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
-  const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
-  const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
+  const inferredHero = inferHeroFromTitle(mod.name);
+  const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
-  const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
-  const mediaAspect = isCompact ? 'aspect-[5/3]' : 'aspect-[16/9]';
-  const actionSize = isCompact ? 'h-8 min-w-8' : 'h-9 min-w-9';
+  const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
+  const mediaHeight = isCompact ? 'h-32' : 'h-40';
+  const chipRowWidth = Math.max(48, cardSize - (isCompact ? 20 : 24));
+  const chips = getReadableCardChips(mod, section, inferredHero);
 
   const media = isSoundSection ? (
-    <div className="relative w-full h-full bg-bg-tertiary">
+    <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
       {heroRenderUrl ? (
         <img
           src={heroRenderUrl}
           alt={inferredHero ?? mod.name}
-          className="w-full h-full object-cover"
+          className={`h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] ${
+            shouldHideNsfw ? 'scale-105 blur-lg saturate-75' : ''
+          }`}
           style={{ objectPosition: `${heroFacePos}% 20%` }}
         />
       ) : thumbnail ? (
-        <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
-      ) : hasAudioPreview ? (
-        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary">
-          <div className="flex items-end gap-0.5 h-10" aria-hidden="true">
-            {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
-              <div key={i} className="w-1 bg-accent/60 rounded-full" style={{ height: `${h * 2}px` }} />
-            ))}
-          </div>
-        </div>
+        <ModThumbnail
+          src={thumbnail}
+          alt={mod.name}
+          nsfw={mod.nsfw}
+          hideNsfw={hideNsfwPreviews}
+          className="h-full w-full"
+          imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
+        />
       ) : (
-        <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
-          <Tag tone="accent" variant="overlay" icon={Volume2}>Sound</Tag>
+        <BrowseSoundPlaceholder title={mod.name} />
+      )}
+      {shouldHideNsfw && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
+          <AlertTriangle className="h-5 w-5" />
+          <span className="mt-1 text-[11px] font-semibold">NSFW hidden</span>
         </div>
       )}
     </div>
   ) : (
-    <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full bg-bg-tertiary" />
+    <ModThumbnail
+      src={thumbnail}
+      alt={mod.name}
+      nsfw={mod.nsfw}
+      hideNsfw={hideNsfwPreviews}
+      className="h-full w-full bg-bg-tertiary"
+      imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
+    />
   );
 
   return (
@@ -1938,115 +2238,62 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex h-full flex-col overflow-hidden rounded-lg border bg-bg-secondary text-left transition-colors cursor-pointer focus-visible:border-accent focus-visible:outline-none ${
+      className={`group flex h-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none ${
         isPlaying
-          ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+          ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
-            ? 'border-accent ring-2 ring-accent/35'
-            : installed
-              ? 'border-state-success/40 hover:border-state-success/70'
-              : 'border-border hover:border-accent/50'
+            ? 'border-accent/40'
+            : 'border-white/[0.07] hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_10px_24px_rgba(0,0,0,0.22)]'
       }`}
     >
-      <div className={`relative overflow-hidden bg-bg-tertiary ${mediaAspect}`}>
+      <div className={`relative overflow-hidden rounded-t-md bg-bg-tertiary ${mediaHeight}`}>
         {media}
-        <div className="absolute left-2 top-2 flex flex-wrap items-start gap-1.5">
-          {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
-          {installed && (
-            <Tag tone="success" variant="overlay">
-              <span aria-hidden>✓</span>
-              Installed
-            </Tag>
-          )}
-          {!installed && isOutdated && (
-            <Tag tone="warning" variant="overlay" icon={AlertTriangle} title={`Last updated ${formatDate(mod.dateModified)}`}>
-              Outdated
-            </Tag>
-          )}
-        </div>
-        <div className="absolute right-2 top-2">
-          {installed && installedDisabled && onEnable ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onEnable(); }}
-              className={`${actionSize} flex items-center gap-1.5 rounded-sm border border-state-warning/50 bg-bg-primary/85 px-2 text-xs font-semibold text-state-warning shadow-md backdrop-blur-sm transition-colors hover:bg-bg-secondary/90 cursor-pointer`}
-              title="Enable this mod (currently in your disabled folder)"
-            >
-              <Power className="w-3.5 h-3.5" />
-              Enable
-            </button>
-          ) : installed ? (
-            <span className={`${actionSize} flex items-center justify-center rounded-sm border border-state-success/50 bg-bg-primary/85 text-state-success shadow-md backdrop-blur-sm text-xs font-semibold`} title="Installed and enabled">
-              Installed
-            </span>
-          ) : downloading ? (
-            <div className={`${actionSize} flex items-center gap-1.5 rounded-sm border border-accent/50 bg-bg-primary/85 px-2 text-xs font-semibold text-accent shadow-md backdrop-blur-sm`} title="Downloading...">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Downloading
-            </div>
-          ) : queuePosition ? (
-            <div className={`${actionSize} flex items-center justify-center rounded-sm border border-accent/60 bg-bg-primary/85 px-2 text-xs font-semibold text-accent shadow-md backdrop-blur-sm`} title={`Queued #${queuePosition}`}>
-              Queued {queuePosition}
-            </div>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-              className={`${actionSize} flex items-center justify-center rounded-sm border border-accent/45 bg-bg-primary/85 px-2 text-accent shadow-md backdrop-blur-sm transition-colors hover:bg-bg-secondary/90 hover:text-text-primary cursor-pointer`}
-              title="Install"
-              aria-label={`Install ${mod.name}`}
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className={`flex min-h-0 flex-1 flex-col gap-2 border-t border-white/5 bg-bg-secondary ${isCompact ? 'p-2.5' : 'p-3'}`}>
-        <div className="min-w-0">
-          <h3 className={`font-semibold leading-snug text-text-primary ${isCompact ? 'truncate text-sm' : 'line-clamp-2 text-base'}`}>{mod.name}</h3>
-          {mod.submitter && <p className="mt-1 truncate text-xs text-text-secondary">by {mod.submitter.name}</p>}
-        </div>
-        <div className={`flex items-center gap-2 text-text-secondary ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-          <span className="flex items-center gap-1" title={`${mod.likeCount ?? 0} likes`}><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
-          <span className="flex items-center gap-1" title={`${mod.viewCount ?? 0} views`}><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
-          {!isCompact && typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-            <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
-          )}
-        </div>
-        {mod.dateModified > 0 && !isCompact && (
-          <div className={`flex items-center gap-1 text-xs ${isOutdated ? 'text-state-warning' : 'text-text-secondary'}`}>
-            {isOutdated ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <Clock className="w-3 h-3 flex-shrink-0" />}
-            <span className="truncate">{isOutdated ? 'Outdated · ' : 'Updated '}{formatDate(mod.dateModified)}</span>
-          </div>
-        )}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary"
+          aria-hidden="true"
+        />
         {isSoundSection && hasAudioPreview && (
           <div
-            className="mt-auto flex min-w-0 items-center gap-2 rounded-sm border border-border bg-bg-tertiary/70 px-2 py-1.5"
-            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-x-3 bottom-3 flex h-9 items-center rounded-[10px] border border-white/10 bg-[#0a0c10]/75 px-2 text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-md"
+            onClick={(event) => event.stopPropagation()}
           >
-            <div className="min-w-0 flex-1">
-              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
-            </div>
-            {!isCompact && (
-              <>
-                <div className="h-5 w-px flex-shrink-0 bg-border" />
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <Volume2 className="w-3.5 h-3.5 text-text-secondary" />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={Math.round(volume * 100)}
-                    onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
-                    className="w-14 h-1 accent-accent cursor-pointer"
-                    title={`Volume: ${Math.round(volume * 100)}%`}
-                    aria-label="Volume"
-                  />
-                </div>
-              </>
-            )}
+            <AudioPreviewPlayer
+              src={audioPreview!}
+              compact
+              variant="inline"
+              volume={volume}
+              onPlayingChange={onPlayingChange}
+              className="min-w-0 flex-1"
+            />
           </div>
         )}
+      </div>
+
+      <div className={`flex min-h-0 flex-1 flex-col bg-bg-secondary ${isCompact ? 'p-2.5' : 'p-3'}`}>
+        <BrowseReadableChipRow chips={chips} availableWidth={chipRowWidth} />
+
+        <div className="mt-2 min-w-0">
+          <h3 className="truncate text-[15px] font-bold leading-[1.25] text-[#eee8df]" title={mod.name}>
+            {mod.name}
+          </h3>
+          <p className="mt-1 truncate text-xs font-medium leading-tight text-text-secondary">
+            by {mod.submitter?.name ?? 'Unknown author'}
+          </p>
+          <BrowseFreshnessLabel timestamp={mod.dateModified} />
+        </div>
+
+        <div className="mt-auto flex h-7 items-end justify-between gap-3">
+          <BrowseReadableStatsRow mod={mod} />
+          <BrowseReadableAction
+            modName={mod.name}
+            installed={installed}
+            installedDisabled={installedDisabled}
+            downloading={downloading}
+            queuePosition={queuePosition}
+            onQuickDownload={onQuickDownload}
+            onEnable={onEnable}
+          />
+        </div>
       </div>
     </div>
   );
@@ -2062,6 +2309,7 @@ interface ModCardProps {
   queuePosition?: number;
   viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
+  cardSize: number;
   section: string;
   volume: number;
   onVolumeChange: (v: number) => void;
@@ -2099,7 +2347,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
@@ -2240,6 +2488,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         queuePosition={queuePosition}
         viewMode={viewMode}
         cardDesign={cardDesign}
+        cardSize={cardSize}
         section={section}
         volume={volume}
         onVolumeChange={onVolumeChange}
