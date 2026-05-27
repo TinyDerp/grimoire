@@ -1799,28 +1799,23 @@ export default function Browse() {
                 disabled (and dimmed) while List is active rather than hidden,
                 keeping the toolbar from reflowing as you switch. */}
             <div
-              className={`flex items-center gap-2 h-12 rounded-lg border border-border bg-bg-secondary px-3 transition-opacity ${
+              className={`flex items-center gap-2 h-10 rounded-lg border border-border bg-bg-secondary px-3 transition-opacity ${
                 layout === 'list' ? 'opacity-40' : ''
               }`}
               title="Card size"
             >
               <Grid3x3 className="w-4 h-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-semibold leading-none tabular-nums text-text-tertiary">
-                  {cardSize}
-                </span>
-                <input
-                  type="range"
-                  min={BROWSE_CARD_SIZE_MIN}
-                  max={BROWSE_CARD_SIZE_MAX}
-                  step={5}
-                  value={cardSize}
-                  disabled={layout === 'list'}
-                  onChange={(e) => setCardSize(Number(e.target.value))}
-                  aria-label="Card size"
-                  className="h-1.5 w-24 cursor-pointer accent-accent disabled:cursor-default"
-                />
-              </div>
+              <input
+                type="range"
+                min={BROWSE_CARD_SIZE_MIN}
+                max={BROWSE_CARD_SIZE_MAX}
+                step={5}
+                value={cardSize}
+                disabled={layout === 'list'}
+                onChange={(e) => setCardSize(Number(e.target.value))}
+                aria-label="Card size"
+                className="h-1.5 w-24 cursor-pointer accent-accent disabled:cursor-default"
+              />
               <LayoutGrid className="w-5 h-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
             </div>
 
