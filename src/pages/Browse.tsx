@@ -1997,7 +1997,7 @@ export default function Browse() {
             layout === 'list'
               ? 'flex flex-col gap-3'
               : browseCardDesign === 'readable'
-                ? 'grid gap-3'
+                ? 'grid justify-start gap-4'
                 : viewMode === 'compact'
                 ? 'grid gap-2'
                 : 'grid gap-3';
@@ -2005,7 +2005,7 @@ export default function Browse() {
             layout === 'list'
               ? undefined
               : browseCardDesign === 'readable'
-                ? { gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }
+                ? { gridTemplateColumns: 'repeat(auto-fill, 280px)' }
                 : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` };
           const hasActiveFilters =
             search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
@@ -2170,8 +2170,6 @@ function ReadableBrowseModCard({
   installedDisabled,
   downloading,
   queuePosition,
-  viewMode,
-  cardSize,
   section,
   volume,
   hideNsfwPreviews,
@@ -2183,15 +2181,13 @@ function ReadableBrowseModCard({
 }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
-  const isCompact = viewMode === 'compact';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
   const inferredHero = inferHeroFromTitle(mod.name);
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
-  const mediaHeight = isCompact ? 'h-32' : 'h-40';
-  const chipRowWidth = Math.max(48, cardSize - (isCompact ? 20 : 24));
+  const chipRowWidth = 256;
   const chips = getReadableCardChips(mod, section, inferredHero);
 
   const media = isSoundSection ? (
@@ -2242,7 +2238,7 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex h-full max-w-[320px] flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none ${
+      className={`group flex h-[318px] w-[280px] flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -2250,7 +2246,7 @@ function ReadableBrowseModCard({
             : 'border-white/[0.07] hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_10px_24px_rgba(0,0,0,0.22)]'
       }`}
     >
-      <div className={`relative overflow-hidden rounded-t-md bg-bg-tertiary ${mediaHeight}`}>
+      <div className="relative h-40 overflow-hidden rounded-t-md bg-bg-tertiary">
         {media}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary"
@@ -2273,7 +2269,7 @@ function ReadableBrowseModCard({
         )}
       </div>
 
-      <div className={`flex min-h-0 flex-1 flex-col bg-bg-secondary ${isCompact ? 'p-2.5' : 'p-3'}`}>
+      <div className="flex min-h-0 flex-1 flex-col bg-bg-secondary p-3">
         <BrowseReadableChipRow chips={chips} availableWidth={chipRowWidth} />
 
         <div className="mt-2 min-w-0">
@@ -2286,7 +2282,7 @@ function ReadableBrowseModCard({
           <BrowseFreshnessLabel timestamp={mod.dateModified} />
         </div>
 
-        <div className="mt-auto flex h-7 items-end justify-between gap-3">
+        <div className="mt-auto flex h-7 items-center justify-between gap-3">
           <BrowseReadableStatsRow mod={mod} />
           <BrowseReadableAction
             modName={mod.name}
