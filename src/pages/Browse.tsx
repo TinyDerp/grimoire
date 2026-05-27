@@ -64,7 +64,7 @@ import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 
-const DEFAULT_PER_PAGE = 20;
+const DEFAULT_PER_PAGE = 36;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 // Effective render mode derived from layout + card size. 'compact' is no
 // longer a user choice: it's what small cards become below the size threshold.
