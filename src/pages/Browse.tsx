@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Check,
   Search,
@@ -140,6 +141,10 @@ type BrowseResultCacheEntry = {
   scrollTop: number;
 };
 
+type QueuedDownloadState = {
+  position: number;
+};
+
 const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
 const BROWSE_READABLE_CHIP_GAP_WIDTH = 6;
 const BROWSE_READABLE_CHIP_OVERFLOW_WIDTH = 30;
@@ -147,6 +152,7 @@ const BROWSE_READABLE_CARD_MIN = 140;
 const BROWSE_READABLE_CARD_GOLDEN = 280;
 const BROWSE_READABLE_CARD_MAX = 340;
 const BROWSE_CARD_SIZE_STEP = 20;
+const BROWSE_GRID_OVERSCAN_ROWS = 4;
 
 type BrowseReadableDensity = 'micro' | 'compact' | 'full';
 
@@ -184,6 +190,39 @@ function getReadableDensity(targetWidth: number): BrowseReadableDensity {
   if (targetWidth < 180) return 'micro';
   if (targetWidth < 240) return 'compact';
   return 'full';
+}
+
+function estimateBrowseRowHeight(
+  columnWidth: number,
+  layout: BrowseLayout,
+  cardDesign: BrowseCardDesign,
+  viewMode: ViewMode,
+  section: string
+): number {
+  if (layout === 'list') return 112;
+  if (cardDesign === 'classic') {
+    return Math.ceil(columnWidth * (viewMode === 'compact' ? 0.75 : 2 / 3));
+  }
+
+  const density = getReadableDensity(columnWidth);
+  const mediaHeight =
+    density === 'micro'
+      ? columnWidth * 0.5625
+      : density === 'compact'
+        ? columnWidth * 0.56
+        : columnWidth * 0.571429;
+  const bodyHeight =
+    density === 'micro'
+      ? 84
+      : density === 'compact'
+        ? section === 'Sound'
+          ? 128
+          : 102
+        : section === 'Sound'
+          ? 168
+          : 128;
+
+  return Math.ceil(mediaHeight + bodyHeight);
 }
 
 function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
@@ -610,6 +649,7 @@ export default function Browse() {
   // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
   const viewMode: ViewMode =
     layout === 'list' ? 'list' : activeCardSize < BROWSE_COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
+  const [browseViewportWidth, setBrowseViewportWidth] = useState(0);
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
   const setCardSize = useCallback((v: number) => setBrowseUi({ cardSize: v }), [setBrowseUi]);
@@ -697,6 +737,7 @@ export default function Browse() {
   // `scrollContainerRef.current`, so reading scrollTop from the DOM ref
   // there always returned 0 and the saved position was useless.
   const latestScrollTopRef = useRef<number>(initialCache?.scrollTop ?? 0);
+  const scrollCacheFrameRef = useRef<number | null>(null);
   // When local search fails (e.g. SQLite error), this flips so the main fetch
   // effect falls back to the API path. Resets whenever filter inputs change.
   const [localSearchFailed, setLocalSearchFailed] = useState(false);
@@ -925,6 +966,23 @@ export default function Browse() {
     pendingScrollTopRef.current = null;
   }, []);
 
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const updateWidth = () => setBrowseViewportWidth(container.clientWidth);
+    updateWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   // Mirror scrollTop into a ref on every scroll. The unmount cleanup below
   // runs as a passive effect — by then React has already nulled
   // `scrollContainerRef.current`, so we can't read scrollTop off the DOM
@@ -935,14 +993,25 @@ export default function Browse() {
     const onScroll = () => {
       const nextScrollTop = container.scrollTop;
       latestScrollTopRef.current = nextScrollTop;
-      browseScrollCacheRef.current.set(activeFetchFilterStampRef.current, nextScrollTop);
-      const cached = browseResultsCacheRef.current.get(activeFetchFilterStampRef.current);
-      if (cached) {
-        cached.scrollTop = nextScrollTop;
-      }
+      if (scrollCacheFrameRef.current !== null) return;
+      scrollCacheFrameRef.current = window.requestAnimationFrame(() => {
+        scrollCacheFrameRef.current = null;
+        const cachedScrollTop = latestScrollTopRef.current;
+        browseScrollCacheRef.current.set(activeFetchFilterStampRef.current, cachedScrollTop);
+        const cached = browseResultsCacheRef.current.get(activeFetchFilterStampRef.current);
+        if (cached) {
+          cached.scrollTop = cachedScrollTop;
+        }
+      });
     };
     container.addEventListener('scroll', onScroll, { passive: true });
-    return () => container.removeEventListener('scroll', onScroll);
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (scrollCacheFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollCacheFrameRef.current);
+        scrollCacheFrameRef.current = null;
+      }
+    };
   }, []);
 
   // Persist session cache on unmount so navigating back resumes exactly
@@ -1796,6 +1865,28 @@ export default function Browse() {
     return map;
   }, [installedMods]);
 
+  const queuedByModId = useMemo(() => {
+    const map = new Map<number, QueuedDownloadState>();
+    downloadQueue.forEach((queued, index) => {
+      map.set(queued.modId, { position: index + 1 });
+    });
+    return map;
+  }, [downloadQueue]);
+
+  const selectedQueuedFileIds = useMemo(() => {
+    if (!selectedMod) return new Set<number>();
+    const ids = new Set<number>();
+    for (const queued of downloadQueue) {
+      if (queued.modId === selectedMod.id) ids.add(queued.fileId);
+    }
+    return ids;
+  }, [downloadQueue, selectedMod]);
+
+  const queuedModIds = useMemo(
+    () => new Set(downloadQueue.map((queued) => queued.modId)),
+    [downloadQueue]
+  );
+
   // Heal legacy 1-click installs that pre-date the forward fix. Those variants
   // have the right gameBananaId but no gameBananaFileId, so ModDetailsModal
   // can't recognise the matching file row as installed and the user ends up
@@ -1872,16 +1963,61 @@ export default function Browse() {
 
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
-  let displayMods = settings?.hideOutdatedMods
-    ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
-    : mods;
-  // "(No hero)" Sound filter — GameBanana Sound categories don't carry hero
-  // metadata, so hero association is purely from the title. When the user
-  // picks the pseudo-hero "none", drop anything whose title matches a known
-  // hero so they see item/UI/music/announcer sounds only.
-  if (section === 'Sound' && heroCategoryId === 'none') {
-    displayMods = displayMods.filter((m) => inferHeroFromTitle(m.name) === null);
-  }
+  const displayMods = useMemo(() => {
+    let nextMods = settings?.hideOutdatedMods
+      ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
+      : mods;
+    // "(No hero)" Sound filter: GameBanana Sound categories don't carry hero
+    // metadata, so hero association is inferred from the title.
+    if (section === 'Sound' && heroCategoryId === 'none') {
+      nextMods = nextMods.filter((m) => inferHeroFromTitle(m.name) === null);
+    }
+
+    return nextMods;
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId]);
+
+  const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
+  const gridGap =
+    layout === 'list'
+      ? 12
+      : browseCardDesign === 'readable'
+        ? getReadableCardGridGap(readableCardTargetWidth)
+        : viewMode === 'compact'
+          ? 8
+          : 12;
+  const columnMinWidth =
+    layout === 'list'
+      ? Math.max(1, browseViewportWidth - 32)
+      : browseCardDesign === 'readable'
+        ? readableCardTargetWidth
+        : activeCardSize;
+  const contentWidth = Math.max(columnMinWidth, browseViewportWidth - 32);
+  const virtualColumnCount =
+    layout === 'list'
+      ? 1
+      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+  const virtualColumnWidth =
+    layout === 'list'
+      ? contentWidth
+      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
+  const estimatedRowHeight = estimateBrowseRowHeight(
+    virtualColumnWidth,
+    layout,
+    browseCardDesign,
+    viewMode,
+    section
+  );
+  const virtualRowCount = Math.ceil(displayMods.length / virtualColumnCount);
+  const rowVirtualizer = useVirtualizer({
+    count: virtualRowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => estimatedRowHeight + gridGap,
+    overscan: BROWSE_GRID_OVERSCAN_ROWS,
+  });
+
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [rowVirtualizer, estimatedRowHeight, gridGap, virtualColumnCount, displayMods.length]);
 
   if (!activeDeadlockPath) {
     return (
@@ -2358,8 +2494,6 @@ export default function Browse() {
           // Column min-width is the slider value, so the grid template can't be
           // a static Tailwind class (the JIT scanner never sees it). Drive it
           // with an inline style; gap still tracks the compact threshold.
-          const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
-          const readableGridGap = getReadableCardGridGap(readableCardTargetWidth);
           const gridClass =
             layout === 'list'
               ? 'flex flex-col gap-3'
@@ -2374,7 +2508,7 @@ export default function Browse() {
               : browseCardDesign === 'readable'
                 ? {
                     gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
-                    gap: `${readableGridGap}px`,
+                    gap: `${gridGap}px`,
                   }
                 : { gridTemplateColumns: `repeat(auto-fill, minmax(${activeCardSize}px, 1fr))` };
           const hasActiveFilters =
@@ -2429,40 +2563,65 @@ export default function Browse() {
               />
             );
           }
+          const virtualRows = rowVirtualizer.getVirtualItems();
           return (
-            <div className={gridClass} style={gridStyle}>
-              {displayMods.map((mod) => {
-                const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
-                const isQueued = queueIndex >= 0;
-                const installedLocal = installedByGbId.get(mod.id);
+            <div
+              className="relative w-full"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const rowStart = virtualRow.index * virtualColumnCount;
+                const rowMods = displayMods.slice(rowStart, rowStart + virtualColumnCount);
                 return (
-                  <ModCard
-                    key={mod.id}
-                    mod={mod}
-                    installed={installedIds.has(mod.id)}
-                    installedDisabled={!!installedLocal && !installedLocal.enabled}
-                    downloading={downloading?.modId === mod.id}
-                    queuePosition={isQueued ? queueIndex + 1 : undefined}
-                    viewMode={viewMode}
-                    cardDesign={browseCardDesign}
-                    cardSize={activeCardSize}
-                    section={section}
-                    volume={soundVolume}
-                    onVolumeChange={setSoundVolume}
-                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
-                    isPlaying={playingModId === mod.id}
-                    onPlayingChange={(playing) => {
-                      setPlayingModId((prev) => {
-                        if (playing) return mod.id;
-                        return prev === mod.id ? null : prev;
-                      });
+                  <div
+                    key={virtualRow.key}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className={layout === 'list' ? 'absolute left-0 top-0 w-full' : 'absolute left-0 top-0 grid w-full'}
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                      paddingBottom: `${gridGap}px`,
+                      gridTemplateColumns:
+                        layout === 'list'
+                          ? undefined
+                          : `repeat(${virtualColumnCount}, minmax(0, 1fr))`,
+                      gap: layout === 'list' ? undefined : `${gridGap}px`,
                     }}
-                    onClick={() => handleModClick(mod)}
-                    onQuickDownload={() => handleQuickDownload(mod)}
-                    onEnable={installedLocal && !installedLocal.enabled
-                      ? () => toggleMod(installedLocal.id)
-                      : undefined}
-                  />
+                  >
+                    {rowMods.map((mod) => {
+                      const queuedState = queuedByModId.get(mod.id);
+                      const installedLocal = installedByGbId.get(mod.id);
+                      return (
+                        <ModCard
+                          key={mod.id}
+                          mod={mod}
+                          installed={installedIds.has(mod.id)}
+                          installedDisabled={!!installedLocal && !installedLocal.enabled}
+                          downloading={downloading?.modId === mod.id}
+                          queuePosition={queuedState?.position}
+                          viewMode={viewMode}
+                          cardDesign={browseCardDesign}
+                          cardSize={activeCardSize}
+                          section={section}
+                          volume={soundVolume}
+                          onVolumeChange={setSoundVolume}
+                          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+                          isPlaying={playingModId === mod.id}
+                          onPlayingChange={(playing) => {
+                            setPlayingModId((prev) => {
+                              if (playing) return mod.id;
+                              return prev === mod.id ? null : prev;
+                            });
+                          }}
+                          onClick={() => handleModClick(mod)}
+                          onQuickDownload={() => handleQuickDownload(mod)}
+                          onEnable={installedLocal && !installedLocal.enabled
+                            ? () => toggleMod(installedLocal.id)
+                            : undefined}
+                        />
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>
@@ -2501,7 +2660,7 @@ export default function Browse() {
           installedFileStates={installedFileStates}
           onEnableFile={(modId) => toggleMod(modId)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
-          queuedFileIds={new Set(downloadQueue.filter((q) => q.modId === selectedMod.id).map((q) => q.fileId))}
+          queuedFileIds={selectedQueuedFileIds}
           extracting={extracting}
           progress={downloadProgress}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
@@ -2516,7 +2675,7 @@ export default function Browse() {
         <ImportCollectionModal
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           installedIds={installedIds}
-          queuedIds={new Set(downloadQueue.map((q) => q.modId))}
+          queuedIds={queuedModIds}
           activeDeadlockPath={activeDeadlockPath}
           onClose={() => setCollectionModalOpen(false)}
         />
@@ -2852,6 +3011,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
   const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
+  const [audioControlsActive, setAudioControlsActive] = useState(false);
 
   // List view keeps original layout
   if (isList) {
@@ -2859,6 +3019,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       <div
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        onMouseEnter={() => setAudioControlsActive(true)}
+        onFocus={() => setAudioControlsActive(true)}
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
@@ -2927,9 +3089,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
             <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
             <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="inline-flex items-center gap-1 leading-none" title={`${mod.downloadCount} downloads`}><Download className="h-3 w-3 shrink-0" />{formatCount(mod.downloadCount)}</span>
-            )}
             {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
@@ -2948,7 +3107,17 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-1 min-w-0">
-              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
+              {audioControlsActive ? (
+                <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
+              ) : (
+                <div className="flex items-center gap-3 text-text-secondary">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary">
+                    <Play className="h-4 w-4 ml-0.5 fill-current" />
+                  </span>
+                  <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
+                  <span className="shrink-0 text-[10px] tabular-nums">0:00</span>
+                </div>
+              )}
             </div>
             <div className="w-px h-4 bg-border flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -3000,6 +3169,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
     <div
       onClick={onClick}
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+      onMouseEnter={() => setAudioControlsActive(true)}
+      onFocus={() => setAudioControlsActive(true)}
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
@@ -3102,9 +3273,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
             <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
             <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="inline-flex items-center gap-1 leading-none"><Download className="h-3 w-3 shrink-0" />{formatCount(mod.downloadCount)}</span>
-            )}
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
         </div>
@@ -3114,11 +3282,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
             <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.likeCount)}</span>
             <span className="inline-flex items-center gap-1 leading-none"><Eye className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="inline-flex items-center gap-1 leading-none" title={`${mod.downloadCount} downloads`}>
-                <Download className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.downloadCount)}
-              </span>
-            )}
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
           {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
@@ -3167,13 +3330,23 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         >
           <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-white/10 px-3 py-2 shadow-lg">
             <div className="flex-1 min-w-0">
-              <AudioPreviewPlayer
-                src={audioPreview!}
-                compact
-                variant="inline"
-                volume={volume}
-                onPlayingChange={onPlayingChange}
-              />
+              {audioControlsActive ? (
+                <AudioPreviewPlayer
+                  src={audioPreview!}
+                  compact
+                  variant="inline"
+                  volume={volume}
+                  onPlayingChange={onPlayingChange}
+                />
+              ) : (
+                <div className="flex items-center gap-3 text-text-secondary">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary">
+                    <Play className="h-4 w-4 ml-0.5 fill-current" />
+                  </span>
+                  <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
+                  <span className="shrink-0 text-[10px] tabular-nums">0:00</span>
+                </div>
+              )}
             </div>
             <div className="w-px h-5 bg-white/20 flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
