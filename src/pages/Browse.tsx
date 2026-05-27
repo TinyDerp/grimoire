@@ -2389,7 +2389,8 @@ function ReadableBrowseModCard({
           nsfw={mod.nsfw}
           hideNsfw={hideNsfwPreviews}
           className="h-full w-full"
-          imageFit="fill"
+          imageFit="cover"
+          imagePosition="center top"
           imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
         />
       ) : (
@@ -2409,7 +2410,8 @@ function ReadableBrowseModCard({
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
       className="h-full w-full bg-bg-tertiary"
-      imageFit="fill"
+      imageFit="cover"
+      imagePosition="center top"
       imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
     />
   );
@@ -2619,7 +2621,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 style={{ objectPosition: `${heroFacePos}% 25%` }}
               />
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
@@ -2629,7 +2631,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </div>
             )
           ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
+            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -2764,7 +2766,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 style={{ objectPosition: `${heroFacePos}% 20%` }}
               />
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -2787,7 +2789,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
         )}
       </div>
 

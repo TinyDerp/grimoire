@@ -10,6 +10,7 @@ interface ModThumbnailProps {
   className?: string;
   imageClassName?: string;
   imageFit?: 'cover' | 'contain' | 'fill';
+  imagePosition?: string;
   fallback?: React.ReactNode;
   /** Canonical Deadlock hero name (e.g. "Lady Geist"). When set, the hero's
    *  render image is used instead of `src`. Sound mods use this so the locker
@@ -31,6 +32,7 @@ export default function ModThumbnail({
   className = '',
   imageClassName = '',
   imageFit = 'cover',
+  imagePosition,
   fallback,
   heroPortrait,
   mergedSources,
@@ -74,6 +76,7 @@ export default function ModThumbnail({
           className={`block h-full w-full ${imageFit === 'contain' ? 'object-contain' : imageFit === 'fill' ? 'object-fill' : 'object-cover'} transition-[filter] duration-200 ${
             resolvedBlur ? 'blur-xl scale-110' : ''
           }`}
+          style={imagePosition ? { objectPosition: imagePosition } : undefined}
         />
       </div>
       {resolvedBlur && (
