@@ -638,7 +638,14 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume, browseUi, setBrowseUi } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const loadSettings = useAppStore((s) => s.loadSettings);
+  const loadMods = useAppStore((s) => s.loadMods);
+  const installedMods = useAppStore((s) => s.mods);
+  const soundVolume = useAppStore((s) => s.soundVolume);
+  const setSoundVolume = useAppStore((s) => s.setSoundVolume);
+  const browseUi = useAppStore((s) => s.browseUi);
+  const setBrowseUi = useAppStore((s) => s.setBrowseUi);
   const browseSession = useAppStore((s) => s.browseSession);
   const setBrowseSession = useAppStore((s) => s.setBrowseSession);
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -2595,8 +2602,8 @@ export default function Browse() {
                       const queuedState = queuedByModId.get(mod.id);
                       const installedLocal = installedByGbId.get(mod.id);
                       return (
-                        <div key={mod.id} className="min-w-0">
-                          <ModCard
+                        <div key={mod.id} className="min-w-0 [contain:layout_paint_style]">
+                          <MemoizedModCard
                           key={mod.id}
                           mod={mod}
                           installed={installedIds.has(mod.id)}
@@ -2611,6 +2618,8 @@ export default function Browse() {
                           onVolumeChange={setSoundVolume}
                           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
                           isPlaying={playingModId === mod.id}
+                          enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
+                          actionContextKey={`${activeDeadlockPath ?? ''}|${section}|${effectiveCategoryId ?? ''}`}
                           onPlayingChange={(playing) => {
                             setPlayingModId((prev) => {
                               if (playing) return mod.id;
@@ -2815,7 +2824,15 @@ function ReadableBrowseModCard({
       onClick={onClick}
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
       onMouseEnter={() => setAudioControlsActive(true)}
+      onMouseLeave={() => {
+        if (!isPlaying) setAudioControlsActive(false);
+      }}
       onFocus={() => setAudioControlsActive(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+          setAudioControlsActive(false);
+        }
+      }}
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
@@ -2970,6 +2987,8 @@ interface ModCardProps {
   onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
   isPlaying: boolean;
+  enableModId?: string;
+  actionContextKey?: string;
   onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
   onQuickDownload: () => void;
@@ -3025,7 +3044,15 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}
         onMouseEnter={() => setAudioControlsActive(true)}
+        onMouseLeave={() => {
+          if (!isPlaying) setAudioControlsActive(false);
+        }}
         onFocus={() => setAudioControlsActive(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+            setAudioControlsActive(false);
+          }
+        }}
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
@@ -3175,7 +3202,15 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       onClick={onClick}
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
       onMouseEnter={() => setAudioControlsActive(true)}
+      onMouseLeave={() => {
+        if (!isPlaying) setAudioControlsActive(false);
+      }}
       onFocus={() => setAudioControlsActive(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+          setAudioControlsActive(false);
+        }
+      }}
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
@@ -3428,5 +3463,22 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
     </div>
   );
 }
+
+const MemoizedModCard = React.memo(ModCard, (prev, next) => (
+  prev.mod === next.mod &&
+  prev.installed === next.installed &&
+  prev.installedDisabled === next.installedDisabled &&
+  prev.downloading === next.downloading &&
+  prev.queuePosition === next.queuePosition &&
+  prev.viewMode === next.viewMode &&
+  prev.cardDesign === next.cardDesign &&
+  prev.cardSize === next.cardSize &&
+  prev.section === next.section &&
+  prev.volume === next.volume &&
+  prev.hideNsfwPreviews === next.hideNsfwPreviews &&
+  prev.isPlaying === next.isPlaying &&
+  prev.enableModId === next.enableModId &&
+  prev.actionContextKey === next.actionContextKey
+));
 
 
