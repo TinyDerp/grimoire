@@ -417,7 +417,6 @@ function usePrefersReducedMotion() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
 
     const handleChange = (event: MediaQueryListEvent) => {
       setPrefersReducedMotion(event.matches);
@@ -626,10 +625,16 @@ function BrowseReadableAction({
       (previousAction === 'downloading' || previousAction === 'queued');
 
     if (completedFromPending) {
-      setCompletionPulse(true);
-      const timeout = window.setTimeout(() => setCompletionPulse(false), 620);
       previousActionRef.current = action;
-      return () => window.clearTimeout(timeout);
+      let endTimeout: number | null = null;
+      const startTimeout = window.setTimeout(() => {
+        setCompletionPulse(true);
+        endTimeout = window.setTimeout(() => setCompletionPulse(false), 620);
+      }, 0);
+      return () => {
+        window.clearTimeout(startTimeout);
+        if (endTimeout !== null) window.clearTimeout(endTimeout);
+      };
     }
 
     previousActionRef.current = action;
@@ -643,10 +648,16 @@ function BrowseReadableAction({
       typeof previousQueuePosition === 'number' &&
       queuePosition !== previousQueuePosition
     ) {
-      setQueueShift(true);
-      const timeout = window.setTimeout(() => setQueueShift(false), 260);
       previousQueuePositionRef.current = queuePosition;
-      return () => window.clearTimeout(timeout);
+      let endTimeout: number | null = null;
+      const startTimeout = window.setTimeout(() => {
+        setQueueShift(true);
+        endTimeout = window.setTimeout(() => setQueueShift(false), 260);
+      }, 0);
+      return () => {
+        window.clearTimeout(startTimeout);
+        if (endTimeout !== null) window.clearTimeout(endTimeout);
+      };
     }
 
     previousQueuePositionRef.current = queuePosition;
@@ -2991,7 +3002,9 @@ function ReadableBrowseModCard({
 
   useEffect(() => {
     if (!suppressHoverIntent) return;
-    if (!isPlaying) setAudioControlsActive(false);
+    if (isPlaying) return;
+    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
+    return () => window.clearTimeout(timeout);
   }, [isPlaying, suppressHoverIntent]);
 
   return (
@@ -3219,7 +3232,9 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
 
   useEffect(() => {
     if (!suppressHoverIntent) return;
-    if (!isPlaying) setAudioControlsActive(false);
+    if (isPlaying) return;
+    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
+    return () => window.clearTimeout(timeout);
   }, [isPlaying, suppressHoverIntent]);
 
   // List view keeps original layout
