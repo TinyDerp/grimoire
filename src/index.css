@@ -91,6 +91,13 @@
 }
 
 /* Base styles */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   @apply bg-bg-primary text-text-primary m-0 antialiased;
   font-family: var(--font-radiance);
@@ -176,7 +183,7 @@ body {
 }
 
 #root {
-  @apply min-h-screen w-full;
+  @apply w-full;
 }
 
 /* Locker Hero animations */

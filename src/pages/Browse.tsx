@@ -9,6 +9,7 @@ import {
   ThumbsUp,
   X,
   Volume2,
+  VolumeX,
   RefreshCw,
   LayoutGrid,
   Grid3x3,
@@ -43,6 +44,7 @@ import {
   useAppStore,
   BROWSE_CARD_SIZE_MIN,
   BROWSE_CARD_SIZE_MAX,
+  BROWSE_CARD_SIZE_DEFAULT,
   BROWSE_COMPACT_CARD_THRESHOLD,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
@@ -132,6 +134,47 @@ type BrowseReadableChip = {
 const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
 const BROWSE_READABLE_CHIP_GAP_WIDTH = 6;
 const BROWSE_READABLE_CHIP_OVERFLOW_WIDTH = 30;
+const BROWSE_READABLE_CARD_MIN = 140;
+const BROWSE_READABLE_CARD_GOLDEN = 280;
+const BROWSE_READABLE_CARD_MAX = 340;
+
+type BrowseReadableDensity = 'micro' | 'compact' | 'full';
+
+function getReadableCardTargetWidth(cardSize: number): number {
+  const clampedSize = Math.min(BROWSE_CARD_SIZE_MAX, Math.max(BROWSE_CARD_SIZE_MIN, cardSize));
+
+  if (clampedSize <= BROWSE_CARD_SIZE_DEFAULT) {
+    const progress =
+      (clampedSize - BROWSE_CARD_SIZE_MIN) /
+      Math.max(1, BROWSE_CARD_SIZE_DEFAULT - BROWSE_CARD_SIZE_MIN);
+    return Math.round(
+      BROWSE_READABLE_CARD_MIN +
+        (BROWSE_READABLE_CARD_GOLDEN - BROWSE_READABLE_CARD_MIN) * progress
+    );
+  }
+
+  const progress =
+    (clampedSize - BROWSE_CARD_SIZE_DEFAULT) /
+    Math.max(1, BROWSE_CARD_SIZE_MAX - BROWSE_CARD_SIZE_DEFAULT);
+  return Math.round(
+    BROWSE_READABLE_CARD_GOLDEN +
+      (BROWSE_READABLE_CARD_MAX - BROWSE_READABLE_CARD_GOLDEN) * progress
+  );
+}
+
+function getReadableCardGridGap(targetWidth: number): number {
+  if (targetWidth <= 180) return 8;
+  if (targetWidth >= BROWSE_READABLE_CARD_GOLDEN) return 16;
+
+  const progress = (targetWidth - 180) / (BROWSE_READABLE_CARD_GOLDEN - 180);
+  return Math.round(8 + 8 * progress);
+}
+
+function getReadableDensity(targetWidth: number): BrowseReadableDensity {
+  if (targetWidth < 180) return 'micro';
+  if (targetWidth < 240) return 'compact';
+  return 'full';
+}
 
 function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
   switch (tone) {
@@ -184,13 +227,21 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 5.5 + 14);
 }
 
-function BrowseReadableChipRow({ chips, availableWidth }: { chips: BrowseReadableChip[]; availableWidth: number }) {
+function BrowseReadableChipRow({
+  chips,
+  availableWidth,
+  maxVisible = BROWSE_READABLE_MAX_VISIBLE_CHIPS,
+}: {
+  chips: BrowseReadableChip[];
+  availableWidth: number;
+  maxVisible?: number;
+}) {
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
   const rowWidth = Math.max(48, availableWidth);
 
   for (const [index, chip] of chips.entries()) {
-    if (visibleChips.length >= BROWSE_READABLE_MAX_VISIBLE_CHIPS) break;
+    if (visibleChips.length >= maxVisible) break;
 
     const remainingAfter = chips.length - index - 1;
     const chipWidth = estimateReadableChipWidth(chip.label);
@@ -206,12 +257,12 @@ function BrowseReadableChipRow({ chips, availableWidth }: { chips: BrowseReadabl
   const hiddenChips = chips.slice(visibleChips.length);
 
   return (
-    <div className="flex min-h-6 min-w-0 items-start gap-1.5 overflow-hidden">
+    <div className="flex min-h-[clamp(22px,8.5714cqw,26px)] min-w-0 items-start gap-[clamp(5px,2.1429cqw,7px)] overflow-hidden">
       {visibleChips.map((chip, index) => (
         <span
           key={`${chip.label}-${index}`}
           title={chip.label}
-          className={`inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-sm border px-1.5 text-[10px] font-medium leading-none ${readableChipTone(
+          className={`inline-flex h-[clamp(18px,7.1429cqw,22px)] shrink-0 items-center whitespace-nowrap rounded-sm border px-[clamp(5px,2.1429cqw,7px)] text-[clamp(9px,3.5714cqw,11px)] font-medium leading-none ${readableChipTone(
             chip.tone
           )}`}
         >
@@ -221,7 +272,7 @@ function BrowseReadableChipRow({ chips, availableWidth }: { chips: BrowseReadabl
       {hiddenChips.length > 0 && (
         <span
           title={hiddenChips.map((chip) => chip.label).join(', ')}
-          className="inline-flex h-5 shrink-0 items-center rounded-sm border border-white/[0.08] bg-white/[0.028] px-1.5 text-[10px] font-medium leading-none text-text-tertiary"
+          className="inline-flex h-[clamp(18px,7.1429cqw,22px)] shrink-0 items-center rounded-sm border border-white/[0.08] bg-white/[0.028] px-[clamp(5px,2.1429cqw,7px)] text-[clamp(9px,3.5714cqw,11px)] font-medium leading-none text-text-tertiary"
         >
           +{hiddenChips.length}
         </span>
@@ -241,41 +292,88 @@ function BrowseFreshnessLabel({ timestamp }: { timestamp: number }) {
   const iso = gameBananaTimestampToIso(timestamp);
 
   if (!iso) {
-    return <span className="mt-0.5 block h-3.5" aria-hidden="true" />;
+    return <span className="mt-0.5 block h-[clamp(13px,5cqw,16px)]" aria-hidden="true" />;
   }
 
   const relative = formatRelativeDate(iso).replace(/(\d+)\s+(mo|yr)\s+ago/g, '$1$2 ago');
   const absolute = formatAbsoluteDate(iso);
 
   if (!relative || !absolute) {
-    return <span className="mt-0.5 block h-3.5" aria-hidden="true" />;
+    return <span className="mt-0.5 block h-[clamp(13px,5cqw,16px)]" aria-hidden="true" />;
   }
 
   return (
     <span
-      className="mt-0.5 inline-flex h-3.5 shrink-0 items-center gap-0.5 text-[10px] font-medium leading-[11px] tabular-nums text-text-tertiary/60"
+      className="mt-0.5 inline-flex h-[clamp(13px,5cqw,16px)] shrink-0 items-center gap-[clamp(2px,0.7143cqw,3px)] text-[clamp(9px,3.5714cqw,11px)] font-medium leading-[clamp(10px,3.9286cqw,12px)] tabular-nums text-text-tertiary/60"
       title={`Last updated on GameBanana: ${absolute}`}
     >
-      <History className="h-3 w-3 shrink-0 -translate-y-0.5" />
-      <span className="leading-[11px]">{relative}</span>
+      <History className="h-[clamp(11px,4.2857cqw,14px)] w-[clamp(11px,4.2857cqw,14px)] shrink-0 -translate-y-0.5" />
+      <span className="leading-[clamp(10px,3.9286cqw,12px)]">{relative}</span>
     </span>
   );
 }
 
-function BrowseReadableStatsRow({ mod }: { mod: GameBananaMod }) {
+function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density: BrowseReadableDensity }) {
+  const isMicro = density === 'micro';
+
   return (
-    <div className="flex h-4 min-w-0 items-end gap-1.5 overflow-visible text-[10px] font-medium leading-[11px] text-text-tertiary/60">
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.likeCount ?? 0} likes`}>
-        <ThumbsUp className="block h-3 w-3 shrink-0 -translate-y-0.5" />
-        <span className="block h-[11px] leading-[11px]">{formatCount(mod.likeCount)}</span>
+    <div
+      className={`flex min-w-0 items-center overflow-visible text-text-tertiary/60 ${
+        isMicro
+          ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(4px,3.5714cqw,10px)] text-[clamp(10px,5.7143cqw,15px)] font-semibold leading-[clamp(11px,6.0714cqw,16px)]'
+          : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(3px,2.1429cqw,7px)] text-[clamp(8px,3.5714cqw,11px)] font-medium leading-[clamp(9px,3.9286cqw,12px)]'
+      }`}
+    >
+      <span
+        className={`inline-flex items-center tabular-nums ${
+          isMicro
+            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
+            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
+        }`}
+        title={`${mod.likeCount ?? 0} likes`}
+      >
+        <ThumbsUp
+          className={`shrink-0 ${
+            isMicro
+              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
+              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
+          }`}
+        />
+        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.likeCount)}</span>
       </span>
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.viewCount ?? 0} views`}>
-        <Eye className="block h-3 w-3 shrink-0" />
-        <span className="block h-[11px] leading-[11px]">{formatCount(mod.viewCount)}</span>
+      <span
+        className={`inline-flex items-center tabular-nums ${
+          isMicro
+            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
+            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
+        }`}
+        title={`${mod.viewCount ?? 0} views`}
+      >
+        <Eye
+          className={`shrink-0 ${
+            isMicro
+              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
+              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
+          }`}
+        />
+        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.viewCount)}</span>
       </span>
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums" title={`${mod.downloadCount ?? 0} downloads`}>
-        <Download className="block h-3 w-3 shrink-0 -translate-y-0.5" />
-        <span className="block h-[11px] leading-[11px]">{formatCount(mod.downloadCount)}</span>
+      <span
+        className={`inline-flex items-center tabular-nums ${
+          isMicro
+            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
+            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
+        }`}
+        title={`${mod.downloadCount ?? 0} downloads`}
+      >
+        <Download
+          className={`shrink-0 ${
+            isMicro
+              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
+              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
+          }`}
+        />
+        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.downloadCount)}</span>
       </span>
     </div>
   );
@@ -290,7 +388,6 @@ function BrowseSoundPlaceholder({ title }: { title: string }) {
       role="img"
       aria-label={`${title} audio preview`}
     >
-      <Volume2 className="absolute left-1/2 top-[43%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-text-primary/12" />
       <div className="absolute inset-x-8 top-[46%] flex h-12 -translate-y-1/2 items-center justify-center gap-1.5 opacity-35">
         {bars.map((height, index) => (
           <span
@@ -311,6 +408,7 @@ function BrowseReadableAction({
   installedDisabled,
   downloading,
   queuePosition,
+  density,
   onQuickDownload,
   onEnable,
 }: {
@@ -319,6 +417,7 @@ function BrowseReadableAction({
   installedDisabled?: boolean;
   downloading: boolean;
   queuePosition?: number;
+  density: BrowseReadableDensity;
   onQuickDownload: () => void;
   onEnable?: () => void;
 }) {
@@ -352,21 +451,24 @@ function BrowseReadableAction({
           : action === 'enable'
             ? 'border-state-success/30 bg-state-success/[0.055] text-state-success hover:border-state-success/50'
             : 'border-accent/30 bg-accent/[0.055] text-accent hover:border-accent/50';
-  const className = `inline-flex h-7 w-[98px] shrink-0 items-center justify-center rounded-md border px-[9px] text-xs font-semibold leading-none transition-colors ${tone}`;
+  const iconOnly = density === 'micro';
+  const className = iconOnly
+    ? `inline-flex h-[clamp(22px,17.1429cqw,28px)] w-[clamp(22px,17.1429cqw,28px)] shrink-0 items-center justify-center rounded-md border text-[clamp(10px,4.2857cqw,13px)] font-semibold leading-none transition-colors ${tone}`
+    : `inline-flex h-[clamp(24px,10cqw,32px)] w-[clamp(76px,35cqw,112px)] shrink-0 items-center justify-center rounded-md border px-[clamp(7px,3.2143cqw,10px)] text-[clamp(10px,4.2857cqw,13px)] font-semibold leading-none transition-colors ${tone}`;
   const icon =
     action === 'downloading' ? (
-      <Loader2 className="block h-[13px] w-[13px] shrink-0 animate-spin" />
+      <Loader2 className="block h-[clamp(12px,4.6429cqw,15px)] w-[clamp(12px,4.6429cqw,15px)] shrink-0 animate-spin" />
     ) : action === 'installed' || action === 'enable' ? (
-      <Check className="block h-[13px] w-[13px] shrink-0" />
+      <Check className="block h-[clamp(12px,4.6429cqw,15px)] w-[clamp(12px,4.6429cqw,15px)] shrink-0" />
     ) : action === 'queued' ? (
-      <Clock className="block h-[13px] w-[13px] shrink-0" />
+      <Clock className="block h-[clamp(12px,4.6429cqw,15px)] w-[clamp(12px,4.6429cqw,15px)] shrink-0" />
     ) : (
-      <Download className="block h-[13px] w-[13px] shrink-0 -translate-y-0.5" />
+      <Download className="block h-[clamp(12px,4.6429cqw,15px)] w-[clamp(12px,4.6429cqw,15px)] shrink-0 -translate-y-0.5" />
     );
   const content = (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+    <span className="inline-flex min-w-0 items-center gap-[clamp(4px,2.1429cqw,7px)]">
       {icon}
-      <span className="min-w-0 truncate leading-none">{label}</span>
+      <span className={iconOnly ? 'sr-only' : 'min-w-0 truncate leading-none'}>{label}</span>
     </span>
   );
 
@@ -1993,11 +2095,13 @@ export default function Browse() {
           // Column min-width is the slider value, so the grid template can't be
           // a static Tailwind class (the JIT scanner never sees it). Drive it
           // with an inline style; gap still tracks the compact threshold.
+          const readableCardTargetWidth = getReadableCardTargetWidth(cardSize);
+          const readableGridGap = getReadableCardGridGap(readableCardTargetWidth);
           const gridClass =
             layout === 'list'
               ? 'flex flex-col gap-3'
               : browseCardDesign === 'readable'
-                ? 'grid justify-start gap-4'
+                ? 'grid'
                 : viewMode === 'compact'
                 ? 'grid gap-2'
                 : 'grid gap-3';
@@ -2005,7 +2109,10 @@ export default function Browse() {
             layout === 'list'
               ? undefined
               : browseCardDesign === 'readable'
-                ? { gridTemplateColumns: 'repeat(auto-fill, 280px)' }
+                ? {
+                    gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
+                    gap: `${readableGridGap}px`,
+                  }
                 : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` };
           const hasActiveFilters =
             search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
@@ -2170,8 +2277,10 @@ function ReadableBrowseModCard({
   installedDisabled,
   downloading,
   queuePosition,
+  cardSize,
   section,
   volume,
+  onVolumeChange,
   hideNsfwPreviews,
   isPlaying,
   onPlayingChange,
@@ -2187,8 +2296,45 @@ function ReadableBrowseModCard({
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
-  const chipRowWidth = 256;
+  const readableCardTargetWidth = getReadableCardTargetWidth(cardSize);
+  const readableDensity = getReadableDensity(readableCardTargetWidth);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const readableScale = readableCardTargetWidth / BROWSE_READABLE_CARD_GOLDEN;
+  const chipRowWidth = Math.round(readableCardTargetWidth - 24 * readableScale);
   const chips = getReadableCardChips(mod, section, inferredHero);
+  const showChips = readableDensity !== 'micro';
+  const showAuthor = readableDensity !== 'micro';
+  const showFreshness = readableDensity === 'full';
+  const isMicro = readableDensity === 'micro';
+  const isCompactReadable = readableDensity === 'compact';
+  const cardAspectClass = isMicro
+    ? 'aspect-[140/132]'
+    : isCompactReadable
+      ? 'aspect-[220/230]'
+      : 'aspect-[280/318]';
+  const mediaHeightClass = isMicro
+    ? 'h-[54cqw]'
+    : isCompactReadable
+      ? 'h-[56cqw]'
+      : 'h-[57.1429cqw]';
+  const bodyPaddingClass = isMicro
+    ? 'p-[clamp(5px,4cqw,7px)]'
+    : isCompactReadable
+      ? 'p-[clamp(7px,4cqw,10px)]'
+      : 'p-[clamp(11px,4.2857cqw,14px)]';
+  const titleMarginClass = showChips
+    ? isCompactReadable
+      ? 'mt-[clamp(4px,2.5cqw,7px)]'
+      : 'mt-[clamp(5px,2.8571cqw,9px)]'
+    : 'mt-0';
+  const footerMarginClass = isMicro
+    ? 'mt-[clamp(4px,3.5714cqw,6px)]'
+    : isCompactReadable
+      ? 'mt-[clamp(6px,4cqw,10px)]'
+      : 'mt-auto';
+  const footerHeightClass = isMicro
+    ? 'h-[clamp(20px,15.7143cqw,24px)]'
+    : 'h-[clamp(22px,10cqw,32px)]';
 
   const media = isSoundSection ? (
     <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
@@ -2238,7 +2384,7 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex h-[318px] w-[280px] flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none ${
+      className={`group flex ${cardAspectClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -2246,7 +2392,7 @@ function ReadableBrowseModCard({
             : 'border-white/[0.07] hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_10px_24px_rgba(0,0,0,0.22)]'
       }`}
     >
-      <div className="relative h-40 overflow-hidden rounded-t-md bg-bg-tertiary">
+      <div className={`relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
         {media}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary"
@@ -2254,7 +2400,7 @@ function ReadableBrowseModCard({
         />
         {isSoundSection && hasAudioPreview && (
           <div
-            className="absolute inset-x-3 bottom-3 flex h-9 items-center rounded-[10px] border border-white/10 bg-[#0a0c10]/75 px-2 text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-md"
+            className="absolute inset-x-[clamp(11px,4.2857cqw,14px)] bottom-[clamp(11px,4.2857cqw,14px)] flex h-[clamp(33px,12.8571cqw,41px)] items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-white/10 bg-[#0a0c10]/75 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-md"
             onClick={(event) => event.stopPropagation()}
           >
             <AudioPreviewPlayer
@@ -2265,31 +2411,71 @@ function ReadableBrowseModCard({
               onPlayingChange={onPlayingChange}
               className="min-w-0 flex-1"
             />
+            <div className="relative ml-[clamp(6px,2.1429cqw,8px)] flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowVolumeSlider((value) => !value)}
+                className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
+                aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
+                aria-expanded={showVolumeSlider}
+              >
+                {volume > 0 ? (
+                  <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
+                ) : (
+                  <VolumeX className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
+                )}
+              </button>
+              {showVolumeSlider && (
+                <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-[#0a0c10]/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(volume * 100)}
+                    onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                    className="w-24 h-1 accent-accent cursor-pointer"
+                    title={`Volume: ${Math.round(volume * 100)}%`}
+                    aria-label="Volume"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-bg-secondary p-3">
-        <BrowseReadableChipRow chips={chips} availableWidth={chipRowWidth} />
+      <div className={`flex min-h-0 flex-1 flex-col bg-bg-secondary ${bodyPaddingClass}`}>
+        {showChips && (
+          <BrowseReadableChipRow
+            chips={chips}
+            availableWidth={chipRowWidth}
+            maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
+          />
+        )}
 
-        <div className="mt-2 min-w-0">
-          <h3 className="truncate text-[15px] font-bold leading-[1.25] text-[#eee8df]" title={mod.name}>
+        <div className={`${titleMarginClass} min-w-0`}>
+          <h3 className="truncate text-[clamp(11px,5.3571cqw,17px)] font-bold leading-[1.25] text-[#eee8df]" title={mod.name}>
             {mod.name}
           </h3>
-          <p className="mt-1 truncate text-xs font-medium leading-tight text-text-secondary">
-            by {mod.submitter?.name ?? 'Unknown author'}
-          </p>
-          <BrowseFreshnessLabel timestamp={mod.dateModified} />
+          {showAuthor && (
+            <p className="mt-[clamp(2px,1.4286cqw,5px)] truncate text-[clamp(10px,4.2857cqw,13px)] font-medium leading-tight text-text-secondary">
+              by {mod.submitter?.name ?? 'Unknown author'}
+            </p>
+          )}
+          {showFreshness && <BrowseFreshnessLabel timestamp={mod.dateModified} />}
         </div>
 
-        <div className="mt-auto flex h-7 items-center justify-between gap-3">
-          <BrowseReadableStatsRow mod={mod} />
+        <div className={`${footerMarginClass} flex ${footerHeightClass} items-center justify-between gap-[clamp(6px,4.2857cqw,14px)]`}>
+          <BrowseReadableStatsRow mod={mod} density={readableDensity} />
           <BrowseReadableAction
             modName={mod.name}
             installed={installed}
             installedDisabled={installedDisabled}
             downloading={downloading}
             queuePosition={queuePosition}
+            density={readableDensity}
             onQuickDownload={onQuickDownload}
             onEnable={onEnable}
           />
@@ -2431,11 +2617,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs flex-wrap">
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
+            <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
             {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+              <span className="inline-flex items-center gap-1 leading-none" title={`${mod.downloadCount} downloads`}><Download className="h-3 w-3 shrink-0" />{formatCount(mod.downloadCount)}</span>
             )}
             {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
@@ -2604,11 +2790,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             </div>
           )}
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
+            <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
             {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1"><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+              <span className="inline-flex items-center gap-1 leading-none"><Download className="h-3 w-3 shrink-0" />{formatCount(mod.downloadCount)}</span>
             )}
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
@@ -2616,12 +2802,12 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       ) : (
         <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.viewCount)}</span>
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.likeCount)}</span>
+            <span className="inline-flex items-center gap-1 leading-none"><Eye className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.viewCount)}</span>
             {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}>
-                <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.downloadCount)}
+              <span className="inline-flex items-center gap-1 leading-none" title={`${mod.downloadCount} downloads`}>
+                <Download className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.downloadCount)}
               </span>
             )}
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
@@ -2682,7 +2868,18 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             </div>
             <div className="w-px h-5 bg-white/20 flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Volume2 className="w-3.5 h-3.5 text-white/70" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVolumeChange(volume > 0 ? 0 : 1);
+                }}
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                title={volume > 0 ? 'Mute' : 'Unmute'}
+                aria-label={volume > 0 ? 'Mute' : 'Unmute'}
+              >
+                {volume > 0 ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
               <input
                 type="range"
                 min={0}

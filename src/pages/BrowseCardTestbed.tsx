@@ -11,7 +11,6 @@ import {
   Play,
   ShieldCheck,
   ThumbsUp,
-  Volume2,
 } from 'lucide-react';
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 import { getHeroFacePosition, getHeroRenderPath } from '../lib/lockerUtils';
@@ -351,7 +350,6 @@ function SoundPlaceholderArt({ card }: { card: SampleCard }) {
       role="img"
       aria-label={`${card.title} audio preview`}
     >
-      <Volume2 className="absolute left-1/2 top-[43%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-text-primary/12" />
       <div className="absolute inset-x-8 top-[46%] flex h-12 -translate-y-1/2 items-center justify-center gap-1.5 opacity-35">
         {bars.map((height, index) => (
           <span
@@ -424,18 +422,18 @@ function Thumbnail({ card }: { card: SampleCard }) {
 
 function StatsRow({ card }: { card: SampleCard }) {
   return (
-    <div className="flex h-4 min-w-0 items-end gap-1.5 overflow-visible text-[10px] font-medium leading-[11px] text-text-tertiary/60">
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
-        <ThumbsUp className="block h-3 w-3 shrink-0 -translate-y-0.5" />
-        <span className="block h-[11px] leading-[11px]">{card.likes}</span>
+    <div className="flex h-4 min-w-0 items-center gap-1.5 overflow-visible text-[10px] font-medium leading-[11px] text-text-tertiary/60">
+      <span className="inline-flex h-4 items-center gap-0.5 tabular-nums">
+        <ThumbsUp className="h-3 w-3 shrink-0" />
+        <span className="leading-[11px]">{card.likes}</span>
       </span>
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
-        <Eye className="block h-3 w-3 shrink-0" />
-        <span className="block h-[11px] leading-[11px]">{card.views}</span>
+      <span className="inline-flex h-4 items-center gap-0.5 tabular-nums">
+        <Eye className="h-3 w-3 shrink-0" />
+        <span className="leading-[11px]">{card.views}</span>
       </span>
-      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
-        <Download className="block h-3 w-3 shrink-0 -translate-y-0.5" />
-        <span className="block h-[11px] leading-[11px]">{card.downloads}</span>
+      <span className="inline-flex h-4 items-center gap-0.5 tabular-nums">
+        <Download className="h-3 w-3 shrink-0" />
+        <span className="leading-[11px]">{card.downloads}</span>
       </span>
     </div>
   );
