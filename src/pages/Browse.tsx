@@ -315,65 +315,43 @@ function BrowseFreshnessLabel({ timestamp }: { timestamp: number }) {
 
 function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density: BrowseReadableDensity }) {
   const isMicro = density === 'micro';
+  const groupClass = isMicro
+    ? 'h-[clamp(18px,10cqw,26px)] gap-[clamp(6px,4.2857cqw,12px)] text-[clamp(11px,6.7857cqw,17px)] font-semibold leading-[clamp(12px,7.1429cqw,18px)]'
+    : 'h-[clamp(14px,6.4286cqw,19px)] gap-[clamp(4px,2.5cqw,8px)] text-[clamp(9px,4.2857cqw,12px)] font-medium leading-[clamp(10px,4.2857cqw,13px)]';
+  const itemClass = isMicro
+    ? 'h-[clamp(18px,10cqw,26px)] gap-[clamp(2px,1.7857cqw,5px)]'
+    : 'h-[clamp(14px,6.4286cqw,19px)] gap-[clamp(1px,0.8929cqw,3px)]';
+  const iconClass = isMicro
+    ? 'h-[clamp(13px,7.1429cqw,19px)] w-[clamp(13px,7.1429cqw,19px)]'
+    : 'h-[clamp(10px,4.6429cqw,14px)] w-[clamp(10px,4.6429cqw,14px)]';
+  const textClass = isMicro
+    ? 'leading-[clamp(12px,7.1429cqw,18px)]'
+    : 'leading-[clamp(10px,4.2857cqw,13px)]';
 
   return (
     <div
-      className={`flex min-w-0 items-center overflow-visible text-text-tertiary/60 ${
-        isMicro
-          ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(4px,3.5714cqw,10px)] text-[clamp(10px,5.7143cqw,15px)] font-semibold leading-[clamp(11px,6.0714cqw,16px)]'
-          : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(3px,2.1429cqw,7px)] text-[clamp(8px,3.5714cqw,11px)] font-medium leading-[clamp(9px,3.9286cqw,12px)]'
-      }`}
+      className={`flex min-w-0 flex-1 items-center overflow-visible text-text-tertiary/60 ${groupClass}`}
     >
       <span
-        className={`inline-flex items-center tabular-nums ${
-          isMicro
-            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
-            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
-        }`}
+        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
         title={`${mod.likeCount ?? 0} likes`}
       >
-        <ThumbsUp
-          className={`shrink-0 ${
-            isMicro
-              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
-              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
-          }`}
-        />
-        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.likeCount)}</span>
+        <ThumbsUp className={`shrink-0 ${iconClass}`} />
+        <span className={textClass}>{formatCount(mod.likeCount)}</span>
       </span>
       <span
-        className={`inline-flex items-center tabular-nums ${
-          isMicro
-            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
-            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
-        }`}
+        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
         title={`${mod.viewCount ?? 0} views`}
       >
-        <Eye
-          className={`shrink-0 ${
-            isMicro
-              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
-              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
-          }`}
-        />
-        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.viewCount)}</span>
+        <Eye className={`shrink-0 ${iconClass}`} />
+        <span className={textClass}>{formatCount(mod.viewCount)}</span>
       </span>
       <span
-        className={`inline-flex items-center tabular-nums ${
-          isMicro
-            ? 'h-[clamp(16px,8.5714cqw,24px)] gap-[clamp(1px,1.4286cqw,4px)]'
-            : 'h-[clamp(13px,5.7143cqw,18px)] gap-[clamp(1px,0.7143cqw,3px)]'
-        }`}
+        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
         title={`${mod.downloadCount ?? 0} downloads`}
       >
-        <Download
-          className={`shrink-0 ${
-            isMicro
-              ? 'h-[clamp(12px,6.4286cqw,18px)] w-[clamp(12px,6.4286cqw,18px)]'
-              : 'h-[clamp(9px,4.2857cqw,14px)] w-[clamp(9px,4.2857cqw,14px)]'
-          }`}
-        />
-        <span className={isMicro ? 'leading-[clamp(11px,6.0714cqw,16px)]' : 'leading-[clamp(9px,3.9286cqw,12px)]'}>{formatCount(mod.downloadCount)}</span>
+        <Download className={`shrink-0 ${iconClass}`} />
+        <span className={textClass}>{formatCount(mod.downloadCount)}</span>
       </span>
     </div>
   );
@@ -409,6 +387,7 @@ function BrowseReadableAction({
   downloading,
   queuePosition,
   density,
+  iconOnlyOverride,
   onQuickDownload,
   onEnable,
 }: {
@@ -418,6 +397,7 @@ function BrowseReadableAction({
   downloading: boolean;
   queuePosition?: number;
   density: BrowseReadableDensity;
+  iconOnlyOverride?: boolean;
   onQuickDownload: () => void;
   onEnable?: () => void;
 }) {
@@ -451,7 +431,7 @@ function BrowseReadableAction({
           : action === 'enable'
             ? 'border-state-success/30 bg-state-success/[0.055] text-state-success hover:border-state-success/50'
             : 'border-accent/30 bg-accent/[0.055] text-accent hover:border-accent/50';
-  const iconOnly = density === 'micro';
+  const iconOnly = iconOnlyOverride ?? density === 'micro';
   const className = iconOnly
     ? `inline-flex h-[clamp(22px,17.1429cqw,28px)] w-[clamp(22px,17.1429cqw,28px)] shrink-0 items-center justify-center rounded-md border text-[clamp(10px,4.2857cqw,13px)] font-semibold leading-none transition-colors ${tone}`
     : `inline-flex h-[clamp(24px,10cqw,32px)] w-[clamp(76px,35cqw,112px)] shrink-0 items-center justify-center rounded-md border px-[clamp(7px,3.2143cqw,10px)] text-[clamp(10px,4.2857cqw,13px)] font-semibold leading-none transition-colors ${tone}`;
@@ -2308,17 +2288,17 @@ function ReadableBrowseModCard({
   const isMicro = readableDensity === 'micro';
   const isCompactReadable = readableDensity === 'compact';
   const cardAspectClass = isMicro
-    ? 'aspect-[140/132]'
+    ? 'aspect-[140/152]'
     : isCompactReadable
       ? 'aspect-[220/230]'
       : 'aspect-[280/318]';
   const mediaHeightClass = isMicro
-    ? 'h-[54cqw]'
+    ? 'h-[52cqw]'
     : isCompactReadable
       ? 'h-[56cqw]'
       : 'h-[57.1429cqw]';
   const bodyPaddingClass = isMicro
-    ? 'p-[clamp(5px,4cqw,7px)]'
+    ? 'px-[clamp(9px,5.7143cqw,12px)] pb-[clamp(9px,6.4286cqw,12px)] pt-[clamp(8px,5.3571cqw,11px)]'
     : isCompactReadable
       ? 'p-[clamp(7px,4cqw,10px)]'
       : 'p-[clamp(11px,4.2857cqw,14px)]';
@@ -2328,12 +2308,12 @@ function ReadableBrowseModCard({
       : 'mt-[clamp(5px,2.8571cqw,9px)]'
     : 'mt-0';
   const footerMarginClass = isMicro
-    ? 'mt-[clamp(4px,3.5714cqw,6px)]'
+    ? 'mt-[clamp(7px,4.2857cqw,10px)]'
     : isCompactReadable
       ? 'mt-[clamp(6px,4cqw,10px)]'
       : 'mt-auto';
   const footerHeightClass = isMicro
-    ? 'h-[clamp(20px,15.7143cqw,24px)]'
+    ? 'h-[clamp(18px,11.4286cqw,24px)]'
     : 'h-[clamp(22px,10cqw,32px)]';
 
   const media = isSoundSection ? (
@@ -2354,6 +2334,7 @@ function ReadableBrowseModCard({
           nsfw={mod.nsfw}
           hideNsfw={hideNsfwPreviews}
           className="h-full w-full"
+          imageFit="fill"
           imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
         />
       ) : (
@@ -2373,6 +2354,7 @@ function ReadableBrowseModCard({
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
       className="h-full w-full bg-bg-tertiary"
+      imageFit="fill"
       imageClassName="transition-transform duration-200 group-hover:scale-[1.02]"
     />
   );
@@ -2398,7 +2380,7 @@ function ReadableBrowseModCard({
           className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary"
           aria-hidden="true"
         />
-        {isSoundSection && hasAudioPreview && (
+        {isSoundSection && hasAudioPreview && !isMicro && (
           <div
             className="absolute inset-x-[clamp(11px,4.2857cqw,14px)] bottom-[clamp(11px,4.2857cqw,14px)] flex h-[clamp(33px,12.8571cqw,41px)] items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-white/10 bg-[#0a0c10]/75 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-md"
             onClick={(event) => event.stopPropagation()}
@@ -2444,6 +2426,21 @@ function ReadableBrowseModCard({
             </div>
           </div>
         )}
+        {isMicro && (
+          <div className="absolute right-[clamp(8px,5cqw,11px)] top-[clamp(8px,5cqw,11px)]">
+            <BrowseReadableAction
+              modName={mod.name}
+              installed={installed}
+              installedDisabled={installedDisabled}
+              downloading={downloading}
+              queuePosition={queuePosition}
+              density={readableDensity}
+              iconOnlyOverride
+              onQuickDownload={onQuickDownload}
+              onEnable={onEnable}
+            />
+          </div>
+        )}
       </div>
 
       <div className={`flex min-h-0 flex-1 flex-col bg-bg-secondary ${bodyPaddingClass}`}>
@@ -2456,7 +2453,14 @@ function ReadableBrowseModCard({
         )}
 
         <div className={`${titleMarginClass} min-w-0`}>
-          <h3 className="truncate text-[clamp(11px,5.3571cqw,17px)] font-bold leading-[1.25] text-[#eee8df]" title={mod.name}>
+          <h3
+            className={`truncate font-bold leading-[1.2] text-[#eee8df] ${
+              isMicro
+                ? 'text-[clamp(13px,7.1429cqw,18px)]'
+                : 'text-[clamp(11px,5.3571cqw,17px)]'
+            }`}
+            title={mod.name}
+          >
             {mod.name}
           </h3>
           {showAuthor && (
@@ -2469,16 +2473,18 @@ function ReadableBrowseModCard({
 
         <div className={`${footerMarginClass} flex ${footerHeightClass} items-center justify-between gap-[clamp(6px,4.2857cqw,14px)]`}>
           <BrowseReadableStatsRow mod={mod} density={readableDensity} />
-          <BrowseReadableAction
-            modName={mod.name}
-            installed={installed}
-            installedDisabled={installedDisabled}
-            downloading={downloading}
-            queuePosition={queuePosition}
-            density={readableDensity}
-            onQuickDownload={onQuickDownload}
-            onEnable={onEnable}
-          />
+          {!isMicro && (
+            <BrowseReadableAction
+              modName={mod.name}
+              installed={installed}
+              installedDisabled={installedDisabled}
+              downloading={downloading}
+              queuePosition={queuePosition}
+              density={readableDensity}
+              onQuickDownload={onQuickDownload}
+              onEnable={onEnable}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -2573,7 +2579,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 style={{ objectPosition: `${heroFacePos}% 25%` }}
               />
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
@@ -2583,7 +2589,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </div>
             )
           ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -2718,7 +2724,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 style={{ objectPosition: `${heroFacePos}% 20%` }}
               />
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -2741,7 +2747,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="fill" />
         )}
       </div>
 

@@ -9,6 +9,7 @@ interface ModThumbnailProps {
   hideNsfw?: boolean;
   className?: string;
   imageClassName?: string;
+  imageFit?: 'cover' | 'contain' | 'fill';
   fallback?: React.ReactNode;
   /** Canonical Deadlock hero name (e.g. "Lady Geist"). When set, the hero's
    *  render image is used instead of `src`. Sound mods use this so the locker
@@ -29,6 +30,7 @@ export default function ModThumbnail({
   hideNsfw,
   className = '',
   imageClassName = '',
+  imageFit = 'cover',
   fallback,
   heroPortrait,
   mergedSources,
@@ -69,7 +71,7 @@ export default function ModThumbnail({
         <img
           src={resolvedSrc}
           alt={alt}
-          className={`block w-full h-full object-cover transition-[filter] duration-200 ${
+          className={`block h-full w-full ${imageFit === 'contain' ? 'object-contain' : imageFit === 'fill' ? 'object-fill' : 'object-cover'} transition-[filter] duration-200 ${
             resolvedBlur ? 'blur-xl scale-110' : ''
           }`}
         />
