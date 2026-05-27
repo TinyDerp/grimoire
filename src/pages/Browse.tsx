@@ -192,6 +192,20 @@ function getReadableDensity(targetWidth: number): BrowseReadableDensity {
   return 'full';
 }
 
+function estimateReadableCardBodyHeight(density: BrowseReadableDensity, section: string): number {
+  const isSound = section === 'Sound';
+
+  if (density === 'micro') {
+    return 8 + 16 + (isSound ? 8 + 28 : 0) + 8 + 24 + 8;
+  }
+
+  if (density === 'compact') {
+    return 12 + 22 + 5 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
+  }
+
+  return 14 + 24 + 6 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
+}
+
 function estimateBrowseRowHeight(
   columnWidth: number,
   layout: BrowseLayout,
@@ -211,18 +225,7 @@ function estimateBrowseRowHeight(
       : density === 'compact'
         ? columnWidth * 0.56
         : columnWidth * 0.571429;
-  const bodyHeight =
-    density === 'micro'
-      ? section === 'Sound'
-        ? 96
-        : 64
-      : density === 'compact'
-        ? section === 'Sound'
-          ? 164
-          : 104
-        : section === 'Sound'
-          ? 208
-          : 120;
+  const bodyHeight = estimateReadableCardBodyHeight(density, section);
 
   return Math.ceil(mediaHeight + bodyHeight);
 }
@@ -469,7 +472,7 @@ function BrowseSoundPlaceholder({ title }: { title: string }) {
 
   return (
     <div
-      className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_24%_22%,rgba(249,115,22,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(96,165,250,0.16),transparent_28%),linear-gradient(135deg,#151312,#22242a_55%,#121416)]"
+      className="browse-sound-placeholder absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_24%_22%,rgba(249,115,22,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(96,165,250,0.16),transparent_28%),linear-gradient(135deg,#151312,#22242a_55%,#121416)]"
       role="img"
       aria-label={`${title} audio preview`}
     >
@@ -477,8 +480,8 @@ function BrowseSoundPlaceholder({ title }: { title: string }) {
         {bars.map((height, index) => (
           <span
             key={`${title}-wave-${index}`}
-            className="w-1 rounded-full bg-text-secondary"
-            style={{ height: `${height}%` }}
+            className="browse-sound-wave-bar w-1 rounded-full bg-text-secondary"
+            style={{ height: `${height}%`, animationDelay: `${index * 38}ms` }}
           />
         ))}
       </div>
@@ -532,6 +535,50 @@ function BrowseReadableAction({
   const className = iconOnly
     ? `browse-action-button browse-action-button--icon browse-action-button--${action}`
     : `browse-action-button browse-action-button--${action}`;
+  const previousActionRef = useRef(action);
+  const previousQueuePositionRef = useRef(queuePosition);
+  const [completionPulse, setCompletionPulse] = useState(false);
+  const [queueShift, setQueueShift] = useState(false);
+
+  useEffect(() => {
+    const previousAction = previousActionRef.current;
+    const completedFromPending =
+      (action === 'installed' || action === 'enable') &&
+      (previousAction === 'downloading' || previousAction === 'queued');
+
+    if (completedFromPending) {
+      setCompletionPulse(true);
+      const timeout = window.setTimeout(() => setCompletionPulse(false), 620);
+      previousActionRef.current = action;
+      return () => window.clearTimeout(timeout);
+    }
+
+    previousActionRef.current = action;
+    return undefined;
+  }, [action]);
+
+  useEffect(() => {
+    const previousQueuePosition = previousQueuePositionRef.current;
+    if (
+      typeof queuePosition === 'number' &&
+      typeof previousQueuePosition === 'number' &&
+      queuePosition !== previousQueuePosition
+    ) {
+      setQueueShift(true);
+      const timeout = window.setTimeout(() => setQueueShift(false), 260);
+      previousQueuePositionRef.current = queuePosition;
+      return () => window.clearTimeout(timeout);
+    }
+
+    previousQueuePositionRef.current = queuePosition;
+    return undefined;
+  }, [queuePosition]);
+
+  const motionClassName = [
+    className,
+    completionPulse ? 'browse-action-button--complete-pop' : '',
+    queueShift ? 'browse-action-button--queue-shift' : '',
+  ].filter(Boolean).join(' ');
   const icon =
     action === 'downloading'
       ? Loader2
@@ -552,7 +599,13 @@ function BrowseReadableAction({
         <span className={`browse-action-button-icon browse-action-button-icon--${action}`}>
           {React.createElement(icon, { 'aria-hidden': true, className: action === 'downloading' ? 'animate-spin' : undefined })}
         </span>
-        <span className="browse-action-button-label">{label}</span>
+        <span className="browse-action-button-label">
+          {action === 'queued' ? (
+            <span key={queuePosition} className="browse-action-button-queue-value">{label}</span>
+          ) : (
+            label
+          )}
+        </span>
       </>
     )
   );
@@ -562,7 +615,7 @@ function BrowseReadableAction({
       <button
         type="button"
         onClick={(event) => { event.stopPropagation(); onQuickDownload(); }}
-        className={`${className} cursor-pointer`}
+        className={`${motionClassName} cursor-pointer`}
         title={`Install ${modName}`}
         aria-label={`Install ${modName}`}
       >
@@ -576,7 +629,7 @@ function BrowseReadableAction({
       <button
         type="button"
         onClick={(event) => { event.stopPropagation(); onEnable(); }}
-        className={`${className} cursor-pointer`}
+        className={`${motionClassName} cursor-pointer`}
         title="Enable this mod (currently in your disabled folder)"
         aria-label={`Enable ${modName}`}
       >
@@ -586,7 +639,7 @@ function BrowseReadableAction({
   }
 
   return (
-    <span className={`${className} cursor-default`} title={label} aria-label={`${label} ${modName}`}>
+    <span className={`${motionClassName} cursor-default`} title={label} aria-label={`${label} ${modName}`}>
       {content}
     </span>
   );
@@ -2597,40 +2650,44 @@ export default function Browse() {
                       gap: layout === 'list' ? undefined : `${gridGap}px`,
                     }}
                   >
-                    {rowMods.map((mod) => {
+                    {rowMods.map((mod, index) => {
                       const queuedState = queuedByModId.get(mod.id);
                       const installedLocal = installedByGbId.get(mod.id);
                       return (
-                        <div key={mod.id} className="min-w-0 [contain:layout_paint_style]">
-                          <MemoizedModCard
+                        <div
                           key={mod.id}
-                          mod={mod}
-                          installed={installedIds.has(mod.id)}
-                          installedDisabled={!!installedLocal && !installedLocal.enabled}
-                          downloading={downloading?.modId === mod.id}
-                          queuePosition={queuedState?.position}
-                          viewMode={viewMode}
-                          cardDesign={browseCardDesign}
-                          cardSize={activeCardSize}
-                          cardHeight={virtualCardHeight}
-                          section={section}
-                          volume={soundVolume}
-                          onVolumeChange={setSoundVolume}
-                          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
-                          isPlaying={playingModId === mod.id}
-                          enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
-                          actionContextKey={`${activeDeadlockPath ?? ''}|${section}|${effectiveCategoryId ?? ''}`}
-                          onPlayingChange={(playing) => {
-                            setPlayingModId((prev) => {
-                              if (playing) return mod.id;
-                              return prev === mod.id ? null : prev;
-                            });
-                          }}
-                          onClick={() => handleModClick(mod)}
-                          onQuickDownload={() => handleQuickDownload(mod)}
-                          onEnable={installedLocal && !installedLocal.enabled
-                            ? () => toggleMod(installedLocal.id)
-                            : undefined}
+                          className="browse-result-card min-w-0 [contain:layout_paint_style]"
+                          style={{ animationDelay: `${Math.min(index * 18, 72)}ms` }}
+                        >
+                          <MemoizedModCard
+                            key={mod.id}
+                            mod={mod}
+                            installed={installedIds.has(mod.id)}
+                            installedDisabled={!!installedLocal && !installedLocal.enabled}
+                            downloading={downloading?.modId === mod.id}
+                            queuePosition={queuedState?.position}
+                            viewMode={viewMode}
+                            cardDesign={browseCardDesign}
+                            cardSize={activeCardSize}
+                            cardHeight={virtualCardHeight}
+                            section={section}
+                            volume={soundVolume}
+                            onVolumeChange={setSoundVolume}
+                            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+                            isPlaying={playingModId === mod.id}
+                            enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
+                            actionContextKey={`${activeDeadlockPath ?? ''}|${section}|${effectiveCategoryId ?? ''}`}
+                            onPlayingChange={(playing) => {
+                              setPlayingModId((prev) => {
+                                if (playing) return mod.id;
+                                return prev === mod.id ? null : prev;
+                              });
+                            }}
+                            onClick={() => handleModClick(mod)}
+                            onQuickDownload={() => handleQuickDownload(mod)}
+                            onEnable={installedLocal && !installedLocal.enabled
+                              ? () => toggleMod(installedLocal.id)
+                              : undefined}
                           />
                         </div>
                       );
@@ -2836,7 +2893,7 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`group flex w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -2844,7 +2901,7 @@ function ReadableBrowseModCard({
             : 'border-white/[0.07] hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-[0_10px_24px_rgba(0,0,0,0.22)]'
       }`}
     >
-      <div className={`relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
+      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
         {media}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-[-2px] h-[calc(3rem+2px)] bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary shadow-[inset_0_-4px_0_var(--color-bg-secondary)]"
