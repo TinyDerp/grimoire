@@ -277,7 +277,6 @@ export default function Sidebar() {
       { to: '/stats', icon: Activity, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
       { to: '/conflicts', icon: Swords, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
       { to: '/profiles', icon: BookMarked, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
-      { to: '/browse-card-testbed', icon: AlertTriangle, label: 'TEST', tooltip: 'Temporary Browse card design testbed. Remove before release.', tone: 'test' },
     ];
 
     return items.filter((item) => {

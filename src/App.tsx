@@ -11,7 +11,6 @@ import Settings from './pages/Settings';
 import Crosshair from './pages/Crosshair';
 import Autoexec from './pages/Autoexec';
 import Stats from './pages/Stats';
-import BrowseCardTestbed from './pages/BrowseCardTestbed';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useSocialStore } from './stores/socialStore';
 
@@ -50,7 +49,6 @@ export default function App() {
             <Route path="autoexec" element={<Autoexec />} />
             <Route path="stats" element={<Stats />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="browse-card-testbed" element={<BrowseCardTestbed />} />
           </Route>
         </Routes>
       </ErrorBoundary>

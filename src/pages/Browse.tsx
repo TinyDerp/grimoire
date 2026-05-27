@@ -1807,7 +1807,7 @@ export default function Browse() {
               <Grid3x3 className="w-4 h-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-semibold leading-none tabular-nums text-text-tertiary">
-                  {cardSize}px
+                  {cardSize}
                 </span>
                 <input
                   type="range"
