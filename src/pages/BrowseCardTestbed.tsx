@@ -33,6 +33,7 @@ type SampleCard = {
   stateBadges?: StateBadge[];
   queuePosition?: number;
   duration?: string;
+  media?: 'image' | 'audio-placeholder';
 };
 
 const SAMPLE_CARDS: SampleCard[] = [
@@ -91,6 +92,7 @@ const SAMPLE_CARDS: SampleCard[] = [
     date: '05/12/2026',
     action: 'downloading',
     duration: '0:18',
+    media: 'audio-placeholder',
   },
   {
     id: 'nsfw-hidden',
@@ -157,18 +159,18 @@ function actionTone(card: SampleCard): string {
     case 'enable':
       return 'border-state-warning/70 bg-bg-primary text-state-warning hover:border-state-warning';
     default:
-      return 'border-accent/70 bg-bg-primary text-accent hover:border-accent';
+      return 'border-accent/60 bg-bg-primary text-accent hover:border-accent';
   }
 }
 
 function badgeTone(badge: StateBadge): string {
   switch (badge) {
     case 'installed':
-      return 'border-state-success/65 bg-bg-primary text-state-success';
+      return 'border-state-success/55 bg-bg-primary text-state-success';
     case 'outdated':
-      return 'border-state-warning/70 bg-bg-primary text-state-warning';
+      return 'border-state-warning/60 bg-bg-primary text-state-warning';
     case 'nsfw':
-      return 'border-state-danger/70 bg-bg-primary text-state-danger';
+      return 'border-state-danger/60 bg-bg-primary text-state-danger';
   }
 }
 
@@ -189,8 +191,8 @@ function heroStyle(card: SampleCard): CSSProperties {
 
 function CategoryChip({ card }: { card: SampleCard }) {
   return (
-    <span className="inline-flex h-5 max-w-[112px] items-center gap-1 rounded-sm border border-white/15 bg-bg-primary px-1.5 text-[10px] font-semibold leading-none text-text-primary shadow-[0_1px_5px_rgba(0,0,0,0.55)]">
-      {card.kind === 'sound' && <Volume2 className="h-3 w-3 shrink-0 text-accent" />}
+    <span className="inline-flex h-5 max-w-[112px] items-center gap-1 rounded-sm border border-white/[0.14] bg-bg-primary px-1.5 text-[10px] font-semibold leading-none text-text-secondary shadow-[0_1px_4px_rgba(0,0,0,0.45)]">
+      {card.kind === 'sound' && <Volume2 className="h-3 w-3 shrink-0 text-text-tertiary" />}
       <span className="truncate">{card.category}</span>
     </span>
   );
@@ -202,7 +204,7 @@ function StatusChips({ card }: { card: SampleCard }) {
       {(card.stateBadges ?? []).slice(0, 2).map((badge) => (
         <span
           key={badge}
-          className={`inline-flex h-5 items-center gap-1 rounded-sm border px-1.5 text-[10px] font-semibold leading-none shadow-[0_1px_5px_rgba(0,0,0,0.55)] ${badgeTone(
+          className={`inline-flex h-5 items-center gap-1 rounded-sm border px-1.5 text-[10px] font-semibold leading-none shadow-[0_1px_4px_rgba(0,0,0,0.45)] ${badgeTone(
             badge
           )}`}
         >
@@ -223,7 +225,7 @@ function ActionButton({ card }: { card: SampleCard }) {
     <button
       type="button"
       aria-label={`${label} ${card.title}`}
-      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border text-xs shadow-[0_1px_5px_rgba(0,0,0,0.55)] transition-colors ${actionTone(
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm border text-xs shadow-[0_1px_4px_rgba(0,0,0,0.5)] transition-colors ${actionTone(
         card
       )} ${passive ? 'cursor-default' : ''}`}
     >
@@ -240,11 +242,35 @@ function ActionButton({ card }: { card: SampleCard }) {
   );
 }
 
+function SoundPlaceholderArt({ card }: { card: SampleCard }) {
+  const bars = [22, 38, 54, 30, 68, 46, 34, 58, 26, 42, 62, 36, 48, 28];
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_24%_22%,rgba(249,115,22,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(96,165,250,0.16),transparent_28%),linear-gradient(135deg,#151312,#22242a_55%,#121416)]"
+      role="img"
+      aria-label={`${card.category} audio preview`}
+    >
+      <Volume2 className="absolute left-1/2 top-[43%] h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-text-primary/12" />
+      <div className="absolute inset-x-8 top-[46%] flex h-12 -translate-y-1/2 items-center justify-center gap-1.5 opacity-35">
+        {bars.map((height, index) => (
+          <span
+            key={`${card.id}-wave-${index}`}
+            className="w-1 rounded-full bg-text-secondary"
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-bg-primary/55 to-transparent" />
+    </div>
+  );
+}
+
 function ThumbnailAudioPreview({ card }: { card: SampleCard }) {
   if (card.kind !== 'sound') return null;
 
   return (
-    <div className="absolute inset-x-2.5 bottom-2.5 flex h-9 items-center gap-2 rounded-sm border border-white/10 bg-bg-primary/92 px-2 text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+    <div className="absolute inset-x-3 bottom-3 flex h-9 items-center gap-2 rounded-[10px] border border-white/10 bg-[#0a0c10]/75 px-2 text-text-secondary shadow-[0_2px_10px_rgba(0,0,0,0.55)] backdrop-blur-md">
       <button
         type="button"
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-bg-primary"
@@ -262,17 +288,22 @@ function ThumbnailAudioPreview({ card }: { card: SampleCard }) {
 
 function Thumbnail({ card }: { card: SampleCard }) {
   const nsfw = hasBadge(card, 'nsfw');
+  const useSoundPlaceholder = card.kind === 'sound' && card.media === 'audio-placeholder';
 
   return (
     <div className="relative h-40 overflow-hidden rounded-t-md bg-bg-tertiary">
-      <img
-        src={getHeroRenderPath(card.hero)}
-        alt={card.hero}
-        className={`h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] ${
-          nsfw ? 'scale-105 blur-lg saturate-75' : ''
-        }`}
-        style={heroStyle(card)}
-      />
+      {useSoundPlaceholder ? (
+        <SoundPlaceholderArt card={card} />
+      ) : (
+        <img
+          src={getHeroRenderPath(card.hero)}
+          alt={card.hero}
+          className={`h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02] ${
+            nsfw ? 'scale-105 blur-lg saturate-75' : ''
+          }`}
+          style={heroStyle(card)}
+        />
+      )}
 
       {nsfw && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
@@ -296,7 +327,7 @@ function Thumbnail({ card }: { card: SampleCard }) {
 
 function StatsRow({ card }: { card: SampleCard }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[11px] text-text-secondary">
+    <div className="flex min-w-0 items-center gap-2 overflow-hidden text-[11px] font-medium text-text-tertiary">
       <span className="inline-flex items-center gap-1 tabular-nums">
         <ThumbsUp className="h-3 w-3" />
         {card.likes}
@@ -320,13 +351,13 @@ function ProductModCard({ card }: { card: SampleCard }) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3">
         <div className="h-[58px] min-w-0 overflow-hidden">
-          <h3 className="line-clamp-2 text-[0.95rem] font-semibold leading-snug text-text-primary">{card.title}</h3>
-          <p className="mt-1 truncate text-xs text-text-tertiary">by {card.author}</p>
+          <h3 className="line-clamp-2 text-[15px] font-bold leading-[1.25] text-[#eee8df]">{card.title}</h3>
+          <p className="mt-1 truncate text-xs font-medium text-text-secondary">by {card.author}</p>
         </div>
 
         <div className="mt-auto flex h-5 items-center justify-between gap-3">
           <StatsRow card={card} />
-          <span className="shrink-0 text-[11px] tabular-nums text-text-tertiary">{card.date}</span>
+          <span className="shrink-0 text-[11px] font-medium tabular-nums text-text-tertiary">{card.date}</span>
         </div>
       </div>
     </article>
