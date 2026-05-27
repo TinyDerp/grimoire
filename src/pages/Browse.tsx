@@ -5,7 +5,6 @@ import {
   Loader2,
   Download,
   Eye,
-  History,
   ThumbsUp,
   X,
   Volume2,
@@ -288,38 +287,34 @@ function gameBananaTimestampToIso(timestamp: number | undefined): string | null 
   return date.toISOString();
 }
 
-function BrowseFreshnessLabel({ timestamp }: { timestamp: number }) {
+function BrowseReadableUpdatedLine({ timestamp }: { timestamp?: number }) {
   const iso = gameBananaTimestampToIso(timestamp);
+  const relative = iso ? formatRelativeDate(iso).replace(/(\d+)\s+(mo|yr)\s+ago/g, '$1$2 ago') : null;
+  const absolute = iso ? formatAbsoluteDate(iso) : null;
+  const isOutdated = typeof timestamp === 'number' && timestamp > 0 && isModOutdated(timestamp);
 
-  if (!iso) {
-    return <span className="mt-0.5 block h-[clamp(13px,5cqw,16px)]" aria-hidden="true" />;
-  }
-
-  const relative = formatRelativeDate(iso).replace(/(\d+)\s+(mo|yr)\s+ago/g, '$1$2 ago');
-  const absolute = formatAbsoluteDate(iso);
-
-  if (!relative || !absolute) {
-    return <span className="mt-0.5 block h-[clamp(13px,5cqw,16px)]" aria-hidden="true" />;
-  }
+  if (!relative) return null;
 
   return (
-    <span
-      className="mt-0.5 inline-flex h-[clamp(13px,5cqw,16px)] shrink-0 items-center gap-[clamp(2px,0.7143cqw,3px)] text-[clamp(9px,3.5714cqw,11px)] font-medium leading-[clamp(10px,3.9286cqw,12px)] tabular-nums text-text-tertiary/60"
-      title={`Last updated on GameBanana: ${absolute}`}
+    <p
+      className={`mt-1 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] ${
+        isOutdated ? 'text-state-warning/88' : 'text-text-secondary/52'
+      }`}
+      title={absolute ? `${isOutdated ? 'Outdated. ' : ''}Last updated on GameBanana: ${absolute}` : undefined}
     >
-      <History className="h-[clamp(11px,4.2857cqw,14px)] w-[clamp(11px,4.2857cqw,14px)] shrink-0 -translate-y-0.5" />
-      <span className="leading-[clamp(10px,3.9286cqw,12px)]">{relative}</span>
-    </span>
+      ↻ {relative}
+    </p>
   );
 }
 
 function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density: BrowseReadableDensity }) {
   const isMicro = density === 'micro';
+  const showDownloads = typeof mod.downloadCount === 'number' && mod.downloadCount > 0;
   const groupClass = isMicro
-    ? 'grid w-full grid-cols-3 gap-[clamp(6px,4.2857cqw,12px)] text-[clamp(11px,6.7857cqw,17px)] font-semibold leading-[clamp(12px,7.1429cqw,18px)]'
+    ? `grid w-full ${showDownloads ? 'grid-cols-3' : 'grid-cols-2'} items-center text-[clamp(11px,6.7857cqw,17px)] font-semibold leading-[clamp(12px,7.1429cqw,18px)]`
     : 'flex min-w-0 flex-1 items-center overflow-visible gap-[clamp(4px,2.5cqw,8px)] text-[clamp(9px,4.2857cqw,12px)] font-medium leading-[clamp(10px,4.2857cqw,13px)]';
   const itemClass = isMicro
-    ? 'min-w-0 justify-start gap-[clamp(3px,2.1429cqw,6px)] text-left'
+    ? 'min-w-0 items-center gap-1 tabular-nums'
     : 'min-w-0 gap-[clamp(1px,0.8929cqw,3px)]';
   const iconClass = isMicro
     ? 'h-[clamp(13px,7.1429cqw,19px)] w-[clamp(13px,7.1429cqw,19px)] text-text-secondary/90'
@@ -333,26 +328,28 @@ function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density:
       className={`min-w-0 text-text-tertiary/60 ${groupClass}`}
     >
       <span
-        className={`inline-flex items-center tabular-nums ${itemClass}`}
+        className={`inline-flex justify-self-start ${itemClass}`}
         title={`${mod.likeCount ?? 0} likes`}
       >
         <ThumbsUp className={`shrink-0 ${iconClass}`} />
         <span className={textClass}>{formatCount(mod.likeCount)}</span>
       </span>
       <span
-        className={`inline-flex items-center tabular-nums ${itemClass}`}
+        className={`inline-flex justify-self-center ${itemClass}`}
         title={`${mod.viewCount ?? 0} views`}
       >
         <Eye className={`shrink-0 ${iconClass}`} />
         <span className={textClass}>{formatCount(mod.viewCount)}</span>
       </span>
-      <span
-        className={`inline-flex items-center tabular-nums ${itemClass}`}
-        title={`${mod.downloadCount ?? 0} downloads`}
-      >
-        <Download className={`shrink-0 ${iconClass}`} />
-        <span className={textClass}>{formatCount(mod.downloadCount)}</span>
-      </span>
+      {showDownloads && (
+        <span
+          className={`inline-flex justify-self-end ${itemClass}`}
+          title={`${mod.downloadCount ?? 0} downloads`}
+        >
+          <Download className={`shrink-0 ${iconClass}`} />
+          <span className={textClass}>{formatCount(mod.downloadCount)}</span>
+        </span>
+      )}
     </div>
   );
 }
@@ -2284,14 +2281,12 @@ function ReadableBrowseModCard({
   const chips = getReadableCardChips(mod, section, inferredHero);
   const showChips = readableDensity !== 'micro';
   const showAuthor = readableDensity !== 'micro';
-  const showFreshness = readableDensity === 'full';
+  const showUpdated = readableDensity === 'full';
   const isMicro = readableDensity === 'micro';
   const isCompactReadable = readableDensity === 'compact';
   const cardFrameClass = isMicro
     ? 'h-auto'
-    : isCompactReadable
-      ? 'aspect-[220/230]'
-      : 'aspect-[280/318]';
+    : 'h-auto';
   const mediaHeightClass = isMicro
     ? 'aspect-[16/9]'
     : isCompactReadable
@@ -2300,8 +2295,8 @@ function ReadableBrowseModCard({
   const bodyPaddingClass = isMicro
     ? 'px-[clamp(9px,5.7143cqw,12px)] pb-[clamp(9px,6.4286cqw,12px)] pt-[clamp(8px,5.3571cqw,11px)]'
     : isCompactReadable
-      ? 'p-[clamp(7px,4cqw,10px)]'
-      : 'p-[clamp(11px,4.2857cqw,14px)]';
+      ? 'px-[clamp(12px,5cqw,14px)] pb-[clamp(12px,5cqw,14px)] pt-[clamp(12px,5cqw,14px)]'
+      : 'px-[clamp(14px,5cqw,16px)] pb-[clamp(14px,5cqw,16px)] pt-[clamp(14px,5cqw,16px)]';
   const titleMarginClass = showChips
     ? isCompactReadable
       ? 'mt-[clamp(4px,2.5cqw,7px)]'
@@ -2309,9 +2304,7 @@ function ReadableBrowseModCard({
     : 'mt-0';
   const footerMarginClass = isMicro
     ? 'mt-[clamp(7px,4.2857cqw,10px)]'
-    : isCompactReadable
-      ? 'mt-[clamp(6px,4cqw,10px)]'
-      : 'mt-auto';
+    : 'mt-[clamp(10px,4.2857cqw,14px)]';
   const footerHeightClass = isMicro
     ? 'h-auto'
     : 'h-[clamp(22px,10cqw,32px)]';
@@ -2443,7 +2436,7 @@ function ReadableBrowseModCard({
         )}
       </div>
 
-      <div className={`flex ${isMicro ? 'flex-none' : 'min-h-0 flex-1'} flex-col bg-bg-secondary ${bodyPaddingClass}`}>
+      <div className={`flex flex-none flex-col bg-bg-secondary ${bodyPaddingClass}`}>
         {showChips && (
           <BrowseReadableChipRow
             chips={chips}
@@ -2454,21 +2447,21 @@ function ReadableBrowseModCard({
 
         <div className={`${titleMarginClass} min-w-0`}>
           <h3
-            className={`truncate font-bold leading-[1.2] text-[#eee8df] ${
+            className={`block truncate font-bold text-[#eee8df] ${
               isMicro
-                ? 'text-[clamp(13px,7.1429cqw,18px)]'
-                : 'text-[clamp(11px,5.3571cqw,17px)]'
+                ? 'text-[clamp(13px,7.1429cqw,18px)] leading-[1.28] pb-px'
+                : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
             }`}
             title={mod.name}
           >
             {mod.name}
           </h3>
           {showAuthor && (
-            <p className="mt-[clamp(2px,1.4286cqw,5px)] truncate text-[clamp(10px,4.2857cqw,13px)] font-medium leading-tight text-text-secondary">
+            <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/64">
               by {mod.submitter?.name ?? 'Unknown author'}
             </p>
           )}
-          {showFreshness && <BrowseFreshnessLabel timestamp={mod.dateModified} />}
+          {showUpdated && <BrowseReadableUpdatedLine timestamp={mod.dateModified} />}
         </div>
 
         <div className={`${footerMarginClass} flex ${footerHeightClass} items-center justify-between gap-[clamp(6px,4.2857cqw,14px)]`}>
