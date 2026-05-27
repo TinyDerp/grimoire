@@ -3,12 +3,13 @@
   <h1>Grimoire</h1>
   <p>A mod manager for Deadlock.</p>
 
+  [![Website](https://img.shields.io/badge/Website-grimoiremods.com-f97316)](https://grimoiremods.com)
   [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?label=release)](../../releases/latest)
   [![AUR](https://img.shields.io/aur/version/grimoire-bin?label=aur)](https://aur.archlinux.org/packages/grimoire-bin)
   [![CI](https://img.shields.io/github/actions/workflow/status/Slush97/grimoire/ci.yml?branch=main&label=ci)](../../actions/workflows/ci.yml)
   [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A)](https://gamebanana.com/tools/22583)
   [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/KgYGHEMq2P)
-  [![License](https://img.shields.io/github/license/Slush97/grimoire)](LICENSE)
+  [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 </div>
 
 ## Install
