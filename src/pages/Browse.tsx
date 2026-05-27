@@ -214,14 +214,14 @@ function estimateBrowseRowHeight(
   const bodyHeight =
     density === 'micro'
       ? section === 'Sound'
-        ? 94
+        ? 110
         : 84
       : density === 'compact'
         ? section === 'Sound'
-          ? 144
+          ? 164
           : 120
         : section === 'Sound'
-          ? 186
+          ? 208
           : 160;
 
   return Math.ceil(mediaHeight + bodyHeight);
@@ -2025,10 +2025,6 @@ export default function Browse() {
     overscan: BROWSE_GRID_OVERSCAN_ROWS,
   });
 
-  useEffect(() => {
-    rowVirtualizer.measure();
-  }, [rowVirtualizer, virtualColumnCount, virtualCardHeight, gridGap, browseCardDesign, layout]);
-
   if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
@@ -2585,12 +2581,11 @@ export default function Browse() {
                 return (
                   <div
                     key={virtualRow.key}
-                    ref={rowVirtualizer.measureElement}
                     data-index={virtualRow.index}
                     className={layout === 'list' ? 'absolute left-0 top-0 w-full' : 'absolute left-0 top-0 grid w-full'}
                     style={{
                       transform: `translateY(${virtualRow.start}px)`,
-                      paddingBottom: `${gridGap}px`,
+                      height: `${virtualCardHeight}px`,
                       gridTemplateColumns:
                         layout === 'list'
                           ? undefined
@@ -2613,6 +2608,7 @@ export default function Browse() {
                           viewMode={viewMode}
                           cardDesign={browseCardDesign}
                           cardSize={activeCardSize}
+                          cardHeight={virtualCardHeight}
                           section={section}
                           volume={soundVolume}
                           onVolumeChange={setSoundVolume}
@@ -2714,6 +2710,7 @@ function ReadableBrowseModCard({
   downloading,
   queuePosition,
   cardSize,
+  cardHeight,
   section,
   volume,
   onVolumeChange,
@@ -2747,9 +2744,7 @@ function ReadableBrowseModCard({
   const isCompactReadable = readableDensity === 'compact';
   const actionIconOnly = readableCardWidth < 220;
   const showInlineAudioPreview = isSoundSection && hasAudioPreview;
-  const cardFrameClass = isMicro
-    ? 'h-auto'
-    : 'h-auto';
+  const cardFrameStyle = typeof cardHeight === 'number' ? { height: `${cardHeight}px` } : undefined;
   const mediaHeightClass = isMicro
     ? 'aspect-[16/9]'
     : isCompactReadable
@@ -2836,7 +2831,8 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex ${cardFrameClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      style={cardFrameStyle}
+      className={`group flex w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -2982,6 +2978,7 @@ interface ModCardProps {
   viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   cardSize: number;
+  cardHeight?: number;
   section: string;
   volume: number;
   onVolumeChange: (v: number) => void;
@@ -3021,7 +3018,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
@@ -3183,6 +3180,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         viewMode={viewMode}
         cardDesign={cardDesign}
         cardSize={cardSize}
+        cardHeight={cardHeight}
         section={section}
         volume={volume}
         onVolumeChange={onVolumeChange}
@@ -3473,6 +3471,7 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.viewMode === next.viewMode &&
   prev.cardDesign === next.cardDesign &&
   prev.cardSize === next.cardSize &&
+  prev.cardHeight === next.cardHeight &&
   prev.section === next.section &&
   prev.volume === next.volume &&
   prev.hideNsfwPreviews === next.hideNsfwPreviews &&
