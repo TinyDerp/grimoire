@@ -402,8 +402,17 @@ export default function ModDetailsModal({
               </span>
             )}
           </div>
-          <h2 className="text-lg lg:text-xl font-bold leading-tight truncate min-w-0 flex-1" title={mod.name}>
-            {mod.name}
+          <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={mod.name}>
+            <a
+              href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View ${mod.name} on GameBanana`}
+              className="group flex min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+            >
+              <span className="truncate">{mod.name}</span>
+              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+            </a>
           </h2>
           {(() => {
             // Hide the modified date when it formats to the same day as the
