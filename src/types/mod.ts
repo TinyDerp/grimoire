@@ -442,6 +442,26 @@ export interface UnknownModFilterGuess {
   crcMatch: UnknownModCrcMatchResult;
 }
 
+export interface UnknownModDetectionProgress {
+  modId: string;
+  requestId?: string;
+  phase: 'fingerprinting' | 'cache-hit' | 'searching' | 'fetching-files' | 'indexing' | 'found' | 'caching-remaining' | 'complete' | 'cancelled' | 'error';
+  message: string;
+  checkedFiles?: number;
+  totalFiles?: number;
+  indexedEntries?: number;
+  bytesFetched?: number;
+  currentFileName?: string;
+  bucket?: {
+    section: string;
+    categoryId?: number;
+    categoryName?: string;
+    search?: string;
+    label?: string;
+  };
+  result?: UnknownModFilterGuess;
+}
+
 export interface UnknownModCrcMatchResult {
   status: 'found' | 'not-found' | 'error';
   modId?: number;
