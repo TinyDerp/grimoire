@@ -638,7 +638,6 @@ export default function Sidebar() {
                   <>
                     {isActive && tone !== 'test' && (
                       <SidebarActiveBackdrop
-                        key={location.pathname}
                         heroSrc={sidebarHeroHighlightSrc}
                         heroPositionX={sidebarHeroHighlightX}
                       />
@@ -901,7 +900,6 @@ export default function Sidebar() {
         >
           {settingsActive && (
             <SidebarActiveBackdrop
-              key={location.pathname}
               heroSrc={sidebarHeroHighlightSrc}
               heroPositionX={sidebarHeroHighlightX}
             />

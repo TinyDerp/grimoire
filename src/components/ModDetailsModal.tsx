@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Volume2,
   Loader2,
@@ -356,7 +357,9 @@ export default function ModDetailsModal({
     );
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  const modal = (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
       onClick={onClose}
@@ -783,4 +786,6 @@ export default function ModDetailsModal({
       )}
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

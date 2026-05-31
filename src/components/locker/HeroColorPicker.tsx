@@ -548,7 +548,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
                         ? 'border-text-primary ring-2 ring-accent/60'
                         : 'border-border'
                     }`}
-                    style={{ background: gradientCss(g.stops, 0, 1, 1) }}
+                    style={{ background: gradientCss(g.stops, hue, saturation, brightness) }}
                     aria-label={g.label}
                   />
                 ))}
