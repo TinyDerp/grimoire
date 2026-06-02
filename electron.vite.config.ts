@@ -16,6 +16,18 @@ const socialTypesAlias = {
     '@grimoire/social-types': resolve(SOCIAL_TYPES_ROOT, 'schemas.ts'),
 };
 
+// ws (bundled transitively via @xhayper/discord-rpc) optionally require()s the
+// native addons bufferutil + utf-8-validate and falls back to pure JS when they
+// are absent. They can't be inlined into the main bundle, and rollup compiles
+// the unresolved optional require into a stub that throws at load, so alias both
+// to an empty module to force ws's pure-JS path. See the stub file for details.
+const WS_NATIVE_OPTIONAL_STUB = resolve(__dirname, 'electron/stubs/ws-optional-native.cjs');
+const mainProcessAlias = {
+    ...socialTypesAlias,
+    bufferutil: WS_NATIVE_OPTIONAL_STUB,
+    'utf-8-validate': WS_NATIVE_OPTIONAL_STUB,
+};
+
 // Bake the social Worker URL at build time. Dev runs (electron-vite dev) fall
 // back to wrangler's local port. Production builds (electron-vite build, used
 // by all package:* scripts) REQUIRE GRIMOIRE_SOCIAL_BASE_URL to be set —
@@ -47,7 +59,7 @@ export default defineConfig(({ mode }) => {
     const SOCIAL_BASE_URL = resolveSocialBaseUrl(mode);
     return {
     main: {
-        resolve: { alias: socialTypesAlias },
+        resolve: { alias: mainProcessAlias },
         plugins: [
             externalizeDepsPlugin({
                 // @grimoire/social-types is a workspace package whose entrypoint is a
