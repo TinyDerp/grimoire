@@ -48,7 +48,6 @@ import {
   BROWSE_CARD_GRID_GAP,
   BROWSE_CARD_COLUMNS_MIN,
   BROWSE_CARD_COLUMNS_DEFAULT,
-  BROWSE_CARD_COLUMNS_MAX,
   BROWSE_COMPACT_CARD_COLUMNS,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
@@ -171,11 +170,10 @@ function getBrowseGridContentWidth(viewportWidth: number): number {
 }
 
 function getMaxBrowseCardColumns(contentWidth: number): number {
-  const widthMax = Math.max(
+  return Math.max(
     1,
     Math.floor((contentWidth + BROWSE_CARD_GRID_GAP) / (BROWSE_CARD_COLUMN_MIN_WIDTH + BROWSE_CARD_GRID_GAP))
   );
-  return Math.min(BROWSE_CARD_COLUMNS_MAX, widthMax);
 }
 
 function getMinBrowseCardColumns(maxColumns: number): number {

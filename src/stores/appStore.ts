@@ -35,7 +35,6 @@ export const BROWSE_CARD_COLUMN_MIN_WIDTH = 140;
 export const BROWSE_CARD_GRID_GAP = 12;
 export const BROWSE_CARD_COLUMNS_MIN = 2;
 export const BROWSE_CARD_COLUMNS_DEFAULT = 3;
-export const BROWSE_CARD_COLUMNS_MAX = 8;
 export const BROWSE_COMPACT_CARD_COLUMNS = 4;
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
@@ -90,7 +89,7 @@ function readPersistedCardColumns(): number {
     if (raw !== null) {
       const n = Number(raw);
       if (Number.isFinite(n)) {
-        return Math.min(BROWSE_CARD_COLUMNS_MAX, Math.max(BROWSE_CARD_COLUMNS_MIN, Math.round(n)));
+        return Math.max(BROWSE_CARD_COLUMNS_MIN, Math.round(n));
       }
     }
     // Migrate the old density presets to comparable column counts.
