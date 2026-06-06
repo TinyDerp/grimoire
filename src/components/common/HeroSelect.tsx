@@ -46,6 +46,9 @@ export function HeroSelect({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const typeaheadRef = useRef('');
+  const typeaheadTimerRef = useRef<number | null>(null);
+  const pendingFocusIndexRef = useRef<number | null>(null);
   const selected = useMemo(
     () => options.find((option) => option.value === value),
     [options, value]
@@ -69,9 +72,21 @@ export function HeroSelect({
   useEffect(() => {
     if (!open) return;
     window.requestAnimationFrame(() => {
-      optionRefs.current[selectedIndex]?.focus();
+      const focusIndex = pendingFocusIndexRef.current ?? selectedIndex;
+      pendingFocusIndexRef.current = null;
+      if (options.length === 0) return;
+      const nextIndex = (focusIndex + options.length) % options.length;
+      optionRefs.current[nextIndex]?.focus();
     });
-  }, [open, selectedIndex]);
+  }, [open, selectedIndex, options.length]);
+
+  useEffect(() => {
+    return () => {
+      if (typeaheadTimerRef.current !== null) {
+        window.clearTimeout(typeaheadTimerRef.current);
+      }
+    };
+  }, []);
 
   const selectOption = (optionValue: string) => {
     onChange(optionValue);
@@ -85,7 +100,59 @@ export function HeroSelect({
     optionRefs.current[nextIndex]?.focus();
   };
 
+  const scheduleTypeaheadReset = () => {
+    if (typeaheadTimerRef.current !== null) {
+      window.clearTimeout(typeaheadTimerRef.current);
+    }
+    typeaheadTimerRef.current = window.setTimeout(() => {
+      typeaheadRef.current = '';
+      typeaheadTimerRef.current = null;
+    }, 750);
+  };
+
+  const findOptionByPrefix = (query: string) => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return -1;
+    return options.findIndex((option) => option.label.toLowerCase().startsWith(normalized));
+  };
+
+  const isTypeaheadKey = (event: React.KeyboardEvent) =>
+    event.key.length === 1 && event.key !== ' ' && !event.altKey && !event.ctrlKey && !event.metaKey;
+
+  const handleTypeaheadKey = (event: React.KeyboardEvent) => {
+    event.preventDefault();
+    const key = event.key.toLowerCase();
+    let query = `${typeaheadRef.current}${key}`;
+    let nextIndex = findOptionByPrefix(query);
+
+    if (nextIndex === -1 && typeaheadRef.current) {
+      query = key;
+      nextIndex = findOptionByPrefix(query);
+    }
+
+    typeaheadRef.current = query;
+    scheduleTypeaheadReset();
+
+    if (nextIndex !== -1) {
+      if (open) {
+        pendingFocusIndexRef.current = null;
+        focusOption(nextIndex);
+      } else {
+        pendingFocusIndexRef.current = nextIndex;
+        setOpen(true);
+        window.requestAnimationFrame(() => focusOption(nextIndex));
+      }
+    } else {
+      pendingFocusIndexRef.current = null;
+    }
+  };
+
   const handleButtonKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (isTypeaheadKey(event)) {
+      handleTypeaheadKey(event);
+      return;
+    }
+
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setOpen(true);
@@ -96,6 +163,11 @@ export function HeroSelect({
   };
 
   const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, optionValue: string, index: number) => {
+    if (isTypeaheadKey(event)) {
+      handleTypeaheadKey(event);
+      return;
+    }
+
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
@@ -170,7 +242,7 @@ export function HeroSelect({
                   selectOption(option.value);
                 }}
                 onKeyDown={(event) => handleOptionKeyDown(event, option.value, index)}
-                className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer ${
+                className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/80 ${
                   active
                     ? 'bg-accent text-bg-primary'
                     : option.muted

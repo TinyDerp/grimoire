@@ -2622,7 +2622,7 @@ export default function Browse() {
 
                       <div className="space-y-3">
                         {heroOptions.length > 0 && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
                             <HeroSelect
                               ariaLabel="Filter by hero"
@@ -2644,13 +2644,14 @@ export default function Browse() {
                                 })),
                               ]}
                             />
-                          </label>
+                          </div>
                         )}
 
                         {categoryOptions.length > 0 && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Category</span>
                             <select
+                              aria-label="Filter by category"
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
@@ -2664,15 +2665,16 @@ export default function Browse() {
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">Hero filter overrides categories.</span>
                             )}
-                          </label>
+                          </div>
                         )}
 
                         {/* Content rating + recency are served by the local catalog
                             mirror, so they only show once it's available. */}
                         {hasLocalCache && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Content</span>
                             <select
+                              aria-label="Filter by content rating"
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
@@ -2681,7 +2683,7 @@ export default function Browse() {
                               <option value="sfw">SFW only</option>
                               <option value="nsfw">NSFW only</option>
                             </select>
-                          </label>
+                          </div>
                         )}
 
                         {hasLocalCache && (
