@@ -837,7 +837,7 @@ export default function Locker() {
 
       {selectedHero && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <LockerHeroView
@@ -878,7 +878,7 @@ export default function Locker() {
 
       {selectedHeroMissing && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <div className="flex h-full flex-col items-center justify-center p-6 text-text-secondary">
@@ -896,7 +896,7 @@ export default function Locker() {
       )}
       {globalSelected && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <LockerGlobalView
