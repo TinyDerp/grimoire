@@ -8,6 +8,7 @@ export interface AppSettings {
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
     hideOutdatedMods: boolean;       // Hide GameBanana mods flagged as outdated in Browse
+    lockerCardsExpandedByDefault: boolean; // Open Locker list-view hero cards expanded on first load
     autoDisableSiblingVariants: boolean; // Installing a different file of an already-enabled mod disables the prior variant (not about updates)
     steamLaunchOptions: string;      // Args written to Steam's localconfig.vdf for Deadlock just before launch
     activeProfileId: string | null;  // Currently active profile
@@ -62,6 +63,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     devDeadlockPath: null,
     hideNsfwPreviews: true,
     hideOutdatedMods: false,
+    lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
     steamLaunchOptions: '',
     activeProfileId: null,

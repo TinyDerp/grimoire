@@ -124,9 +124,10 @@ export default function Locker() {
   });
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
   const [showAbilityRecolorOnly, setShowAbilityRecolorOnly] = useState(false);
-  // List-view accordion state. Empty set = every hero collapsed (the default),
-  // so the list reads as a compact set of rows until the user opens one.
+  // List-view accordion state. The Settings preference decides the initial
+  // state; after that, manual expand/collapse stays under the user's control.
   const [expandedHeroes, setExpandedHeroes] = useState<Set<number>>(() => new Set());
+  const appliedExpansionDefaultRef = useRef<boolean | null>(null);
   const toggleHeroExpanded = useCallback((heroId: number) => {
     setExpandedHeroes((prev) => {
       const next = new Set(prev);
@@ -374,6 +375,20 @@ export default function Locker() {
         : heroList,
     [abilityRecolorSupport, heroList, showAbilityRecolorOnly]
   );
+  const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
+
+  useEffect(() => {
+    if (heroList.length === 0) return;
+    if (appliedExpansionDefaultRef.current === lockerCardsExpandedByDefault) return;
+
+    setExpandedHeroes(
+      lockerCardsExpandedByDefault
+        ? new Set(heroList.map((hero) => hero.id))
+        : new Set()
+    );
+    appliedExpansionDefaultRef.current = lockerCardsExpandedByDefault;
+  }, [heroList, lockerCardsExpandedByDefault]);
+
   const allExpanded =
     visibleHeroList.length > 0 && visibleHeroList.every((hero) => expandedHeroes.has(hero.id));
   const toggleExpandAll = useCallback(() => {
