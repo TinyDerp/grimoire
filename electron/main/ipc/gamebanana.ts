@@ -31,6 +31,7 @@ interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 interface GetModDetailsArgs {
@@ -70,8 +71,8 @@ function getActiveDeadlockPath(): string | null {
 ipcMain.handle(
     'browse-mods',
     async (_, args: BrowseModsArgs): Promise<GameBananaModsResponse> => {
-        const { page, perPage, search, section = 'Mod', categoryId, sort } = args;
-        return fetchSubmissions(section, page, perPage, search, categoryId, sort);
+        const { page, perPage, search, section = 'Mod', categoryId, sort, submitterId } = args;
+        return fetchSubmissions(section, page, perPage, search, categoryId, sort, submitterId);
     }
 );
 

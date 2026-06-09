@@ -385,9 +385,10 @@ export async function browseMods(
   search?: string,
   section?: string,
   categoryId?: number,
-  sort?: string
+  sort?: string,
+  submitterId?: number
 ): Promise<GameBananaModsResponse> {
-  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort });
+  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort, submitterId });
 }
 
 export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {

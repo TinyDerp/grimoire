@@ -403,6 +403,7 @@ interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 interface GetModDetailsArgs {

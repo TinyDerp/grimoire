@@ -26,11 +26,22 @@ import {
   Play,
   Maximize2,
   PanelRight,
+  ArrowLeft,
+  ExternalLink,
+  Coffee,
+  Youtube,
+  Twitter,
+  Twitch,
+  Instagram,
+  Facebook,
+  Github,
+  Globe,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   browseMods,
   getModDetails,
+  getSubmitterLinks,
   downloadMod,
   getGamebananaSections,
   getGamebananaCategories,
@@ -42,12 +53,13 @@ import type {
   GameBananaModDetails,
   GameBananaSection,
   GameBananaCategoryNode,
+  GameBananaArtistLink,
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
 } from '../stores/appStore';
-import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
+import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -86,6 +98,20 @@ const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // The grid always keeps at least this much room; the sidebar's effective width
 // is capped so a wide drag (or a small window) can't starve the browse area.
 const BROWSE_SIDEBAR_GRID_RESERVE = 360;
+
+const BROWSE_SOCIAL_ICONS: Record<string, LucideIcon> = {
+  youtube: Youtube,
+  twitter: Twitter,
+  x: Twitter,
+  twitch: Twitch,
+  instagram: Instagram,
+  facebook: Facebook,
+  github: Github,
+};
+
+function browseSocialIcon(platform: string): LucideIcon {
+  return BROWSE_SOCIAL_ICONS[platform] ?? Globe;
+}
 
 function clampSidebarWidth(value: number): number {
   return clampNumber(value, BROWSE_SIDEBAR_WIDTH_MIN, BROWSE_SIDEBAR_WIDTH_MAX);
@@ -895,7 +921,10 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter } = browseUi;
+  // Artist mode: the grid is scoped to one submitter's mods and Browse shows an
+  // artist banner instead of the normal search/filter header.
+  const artistMode = !!submitter;
   const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
   const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
   const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
@@ -925,7 +954,7 @@ export default function Browse() {
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}`;
+  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}`;
   const initialCache = browseSession && browseSession.stamp === initialFilterStamp
     ? browseSession
     : null;
@@ -971,7 +1000,7 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}` : null
   );
   // Monotonic guard for browse/search requests. Filter changes and newer
   // requests invalidate older responses so they cannot append stale pages into
@@ -1032,6 +1061,20 @@ export default function Browse() {
   const detailsSidebarActive =
     browseDetailsView === 'sidebar' &&
     browseViewportMetrics.windowWidth >= BROWSE_SIDEBAR_MIN_WINDOW_WIDTH;
+
+  // Artist social/contact links for the banner. Loaded only when an artist is
+  // highlighted (not on every mod open), and cached per member id main-side.
+  const [artistSocials, setArtistSocials] = useState<GameBananaArtistLink[]>([]);
+  useEffect(() => {
+    const memberId = submitter?.id;
+    setArtistSocials([]);
+    if (!memberId || memberId <= 0) return;
+    let cancelled = false;
+    getSubmitterLinks(memberId)
+      .then((links) => { if (!cancelled) setArtistSocials(links); })
+      .catch(() => { if (!cancelled) setArtistSocials([]); });
+    return () => { cancelled = true; };
+  }, [submitter?.id]);
   // User-resizable sidebar width, persisted. The effective width is also capped
   // so the grid keeps BROWSE_SIDEBAR_GRID_RESERVE px no matter how the user drags
   // or how small the window is.
@@ -1194,7 +1237,7 @@ export default function Browse() {
     return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
   }, [addedWithin, addedTo]);
 
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}`;
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -1355,7 +1398,7 @@ export default function Browse() {
   useEffect(() => {
     return () => {
       const ui = useAppStore.getState().browseUi;
-      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}`;
+      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
       // unhelpfully. Clear instead so the next mount starts fresh.
@@ -1382,6 +1425,9 @@ export default function Browse() {
   // which caused fetchMods (API, no hero filter) to race with searchLocal and
   // overwrite real results with an empty API response.
   const useLocalSearch = useMemo(() => {
+    // Artist mode is a GameBanana-only filter (Generic_Submitter); the local
+    // catalog mirror has no submitter column, so always go remote.
+    if (submitter) return false;
     const hasSearchQuery = debouncedSearch.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
     // NSFW and recency filters only the local catalog mirror can satisfy: the
@@ -1392,7 +1438,7 @@ export default function Browse() {
     // come from the local mirror (which sorts name COLLATE NOCASE ASC).
     const needsLocalSort = sort === 'name';
     return (hasSearchQuery || hasHeroFilter || hasContentFilter || needsLocalSort) && hasLocalCache && !localSearchFailed;
-  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hasLocalCache, localSearchFailed]);
+  }, [submitter, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
@@ -1440,10 +1486,14 @@ export default function Browse() {
       const response = await browseMods(
         page,
         perPage,
-        effectiveSearch || undefined,
+        // In artist mode the grid is scoped by submitter; text search and
+        // category don't combine cleanly with that on the API, so they're
+        // dropped while viewing an artist.
+        submitter ? undefined : (effectiveSearch || undefined),
         section,
-        effectiveCategoryId,
-        sort !== 'default' ? sort : undefined
+        submitter ? undefined : effectiveCategoryId,
+        sort !== 'default' ? sort : undefined,
+        submitter?.id
       );
 
       // Enrich results with cached NSFW status from local database
@@ -1519,6 +1569,7 @@ export default function Browse() {
     effectiveCategoryId,
     fetchFilterStamp,
     useLocalSearch,
+    submitter,
   ]);
 
   // Local search function using SQLite cache
@@ -2356,6 +2407,17 @@ export default function Browse() {
     setSelectedModDates(null);
   };
 
+  // Enter artist mode: scope the grid to one submitter. We leave the user's
+  // search/hero/category filters untouched (artist mode ignores them in the
+  // fetch) so clearing artist mode restores their prior browse exactly.
+  const viewArtist = (artist: BrowseArtistRef) => {
+    if (!artist?.id) return;
+    closeSelectedMod();
+    setBrowseUi({ submitter: artist });
+    scrollContainerRef.current?.scrollTo({ top: 0 });
+  };
+  const clearArtist = () => setBrowseUi({ submitter: undefined });
+
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =
     layout === 'list'
@@ -2443,14 +2505,108 @@ export default function Browse() {
         previousLabel={previousSelectedMod?.name}
         nextLabel={nextSelectedMod?.name}
         onDeleteFile={deleteMod}
+        onViewArtist={viewArtist}
       />
     ) : null;
 
   return (
     <div className="flex h-full min-h-0">
       <div className={`flex-1 min-w-0 h-full overflow-y-auto ${isBrowseScrolling ? 'browse-is-scrolling' : ''}`} ref={scrollContainerRef}>
-      {/* Header with Search */}
+      {/* Header: artist banner in artist mode, otherwise the search/filter row. */}
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
+        {artistMode && submitter ? (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={clearArtist}
+              aria-label="Back to browse"
+              title="Back to browse"
+              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            {submitter.avatarUrl ? (
+              <img
+                src={submitter.avatarUrl}
+                alt={submitter.name}
+                className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
+              />
+            ) : (
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-lg font-bold uppercase text-accent">
+                {submitter.name.charAt(0)}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                {submitter.profileUrl ? (
+                  <a
+                    href={submitter.profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`View ${submitter.name} on GameBanana`}
+                    className="group inline-flex min-w-0 items-center gap-1.5 text-lg font-bold text-text-primary transition-colors hover:text-accent"
+                  >
+                    <span className="min-w-0 truncate">{submitter.name}</span>
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                  </a>
+                ) : (
+                  <span className="min-w-0 truncate text-lg font-bold text-text-primary">{submitter.name}</span>
+                )}
+                {_totalCount > 0 && (
+                  <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary border border-border">
+                    {_totalCount.toLocaleString()} {_totalCount === 1 ? 'mod' : 'mods'}
+                  </span>
+                )}
+              </div>
+              {artistSocials.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {artistSocials.map((link) => {
+                    const Icon = browseSocialIcon(link.platform);
+                    return (
+                      <a
+                        key={link.url}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={link.label}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg-secondary/60 px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {link.label}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {submitter.kofiUrl && (
+              <a
+                href={submitter.kofiUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Support ${submitter.name} on Ko-fi`}
+                className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
+              >
+                <Coffee className="h-4 w-4" />
+                Ko-fi
+              </a>
+            )}
+            <div className="hidden flex-shrink-0 items-center gap-1 rounded-lg border border-border bg-bg-secondary p-0.5 sm:flex">
+              {(['Mod', 'Sound'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSection(s)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {s === 'Mod' ? 'Mods' : 'Sounds'}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSearch}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Input with integrated submit */}
@@ -2928,6 +3084,7 @@ export default function Browse() {
             </div>
           )}
         </form>
+        )}
       </div>
 
       {/* Main Content */}

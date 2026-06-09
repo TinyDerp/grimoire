@@ -47,6 +47,18 @@ export interface BrowseUiState {
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
   heroCategoryId: number | 'all' | 'none';
   categoryId: number | 'all';
+  // Artist mode: when set, the grid lists only this submitter's mods
+  // (GameBanana Generic_Submitter filter) and Browse shows an artist banner.
+  // Session-only; carries display fields so the banner needs no extra fetch.
+  submitter?: BrowseArtistRef;
+}
+
+export interface BrowseArtistRef {
+  id: number;
+  name: string;
+  avatarUrl?: string;
+  profileUrl?: string;
+  kofiUrl?: string;
 }
 
 // layout + sort behave like preferences. Cache them in localStorage so they

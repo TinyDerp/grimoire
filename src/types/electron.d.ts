@@ -46,6 +46,7 @@ export interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 export interface GetModDetailsArgs {

@@ -22,19 +22,11 @@ import {
   Bell,
   Trash2,
   Coffee,
-  Youtube,
-  Twitter,
-  Twitch,
-  Instagram,
-  Facebook,
-  Github,
-  Globe,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate, GameBananaArtistLink } from '../types/gamebanana';
+import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
 import { isModOutdated, formatDate } from '../types/gamebanana';
-import { getModComments, getModUpdates, getSubmitterLinks } from '../lib/api';
+import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
@@ -42,24 +34,6 @@ import { ArchivedTag } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
-
-// Lucide ships brand glyphs for some platforms but not newer ones (Bluesky,
-// Discord, TikTok, Ko-fi...); those fall back to a generic globe so every link
-// still renders a recognizable chip. Keys are the normalized platform tokens
-// from the GameBanana contact icon classes.
-const SOCIAL_ICONS: Record<string, LucideIcon> = {
-  youtube: Youtube,
-  twitter: Twitter,
-  x: Twitter,
-  twitch: Twitch,
-  instagram: Instagram,
-  facebook: Facebook,
-  github: Github,
-};
-
-function socialIcon(platform: string): LucideIcon {
-  return SOCIAL_ICONS[platform] ?? Globe;
-}
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
@@ -113,6 +87,9 @@ interface ModDetailsModalProps {
   /** When provided, render a dock/pop-out button in the header that switches
    *  between the two presentations. The caller persists the choice. */
   onChangeView?: (view: 'modal' | 'sidebar') => void;
+  /** When provided, clicking the artist opens "artist mode" (a grid of all the
+   *  artist's mods) instead of their GameBanana profile. */
+  onViewArtist?: (artist: { id: number; name: string; avatarUrl?: string; profileUrl?: string; kofiUrl?: string }) => void;
 }
 
 export default function ModDetailsModal({
@@ -145,6 +122,7 @@ export default function ModDetailsModal({
   onDeleteFile,
   variant = 'modal',
   onChangeView,
+  onViewArtist,
 }: ModDetailsModalProps) {
   const isSidebar = variant === 'sidebar';
   const images = mod.previewMedia?.images ?? [];
@@ -160,8 +138,6 @@ export default function ModDetailsModal({
   const swipeStartXRef = useRef<number | null>(null);
   // Falls back to a monogram when the artist avatar URL 404s or is blocked.
   const [avatarFailed, setAvatarFailed] = useState(false);
-  // Artist social/contact links, loaded lazily from the member profile.
-  const [artistLinks, setArtistLinks] = useState<GameBananaArtistLink[]>([]);
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
@@ -250,26 +226,6 @@ export default function ModDetailsModal({
     swipeStartXRef.current = null;
     setAvatarFailed(false);
   }, [mod.id]);
-
-  // Pull the artist's social/contact links from their member profile. Cleared
-  // up front so a different artist's links never linger during the fetch; the
-  // main-process layer caches by member id, so repeat artists resolve instantly.
-  useEffect(() => {
-    const memberId = mod.submitter?.id;
-    setArtistLinks([]);
-    if (!memberId || memberId <= 0) return;
-    let cancelled = false;
-    getSubmitterLinks(memberId)
-      .then((links) => {
-        if (!cancelled) setArtistLinks(links);
-      })
-      .catch(() => {
-        if (!cancelled) setArtistLinks([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mod.submitter?.id]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -392,6 +348,35 @@ export default function ModDetailsModal({
   const submitterProfileUrl = mod.submitter?.profileUrl
     ?? (mod.submitter && mod.submitter.id > 0 ? `https://gamebanana.com/members/${mod.submitter.id}` : undefined);
   const submitterKofiUrl = mod.submitter?.kofiUrl;
+  // When the host provides onViewArtist, the artist becomes a click target that
+  // opens "artist mode" (all of their mods) instead of the GameBanana profile.
+  const submitter = mod.submitter;
+  const openArtist =
+    submitter && submitter.id > 0 && onViewArtist
+      ? () =>
+          onViewArtist({
+            id: submitter.id,
+            name: submitter.name,
+            avatarUrl: submitter.avatarUrl,
+            profileUrl: submitterProfileUrl,
+            kofiUrl: submitterKofiUrl,
+          })
+      : undefined;
+  const avatarVisual = submitter ? (
+    submitter.avatarUrl && !avatarFailed ? (
+      <img
+        src={submitter.avatarUrl}
+        alt={submitter.name}
+        loading="lazy"
+        onError={() => setAvatarFailed(true)}
+        className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
+      />
+    ) : (
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent">
+        {submitter.name.charAt(0)}
+      </div>
+    )
+  ) : null;
   const modalBodyTransitionClass = isNavigating
     ? navigationDirection === 'previous'
       ? 'mod-details-body--loading-previous'
@@ -1254,38 +1239,46 @@ export default function ModDetailsModal({
                 </div>
               )}
 
-              {mod.submitter && (
+              {submitter && (
                 <section>
-                  <div className="space-y-3 rounded-xl border border-border bg-bg-tertiary/40 p-3">
-                  <div className="flex items-center gap-3">
-                    {mod.submitter.avatarUrl && !avatarFailed ? (
-                      <img
-                        src={mod.submitter.avatarUrl}
-                        alt={mod.submitter.name}
-                        loading="lazy"
-                        onError={() => setAvatarFailed(true)}
-                        className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
-                      />
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-tertiary/40 p-3">
+                    {openArtist ? (
+                      <button
+                        type="button"
+                        onClick={openArtist}
+                        title={`View ${submitter.name}'s mods`}
+                        className="flex-shrink-0 rounded-full transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer"
+                      >
+                        {avatarVisual}
+                      </button>
                     ) : (
-                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent">
-                        {mod.submitter.name.charAt(0)}
-                      </div>
+                      avatarVisual
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Artist</div>
-                      {submitterProfileUrl ? (
+                      {openArtist ? (
+                        <button
+                          type="button"
+                          onClick={openArtist}
+                          title={`View ${submitter.name}'s mods`}
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent cursor-pointer"
+                        >
+                          <span className="min-w-0 truncate">{submitter.name}</span>
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                        </button>
+                      ) : submitterProfileUrl ? (
                         <a
                           href={submitterProfileUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title={`View ${mod.submitter.name} on GameBanana`}
+                          title={`View ${submitter.name} on GameBanana`}
                           className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent"
                         >
-                          <span className="min-w-0 truncate">{mod.submitter.name}</span>
+                          <span className="min-w-0 truncate">{submitter.name}</span>
                           <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
                         </a>
                       ) : (
-                        <span className="block min-w-0 truncate font-semibold text-text-primary">{mod.submitter.name}</span>
+                        <span className="block min-w-0 truncate font-semibold text-text-primary">{submitter.name}</span>
                       )}
                     </div>
                     {submitterKofiUrl && (
@@ -1293,42 +1286,13 @@ export default function ModDetailsModal({
                         href={submitterKofiUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`Support ${mod.submitter.name} on Ko-fi`}
+                        title={`Support ${submitter.name} on Ko-fi`}
                         className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
                         Ko-fi
                       </a>
                     )}
-                  </div>
-                  {(() => {
-                    // Drop a Ko-fi contact entry when we already show the brand
-                    // button so it isn't listed twice.
-                    const chips = artistLinks.filter(
-                      (link) => !(submitterKofiUrl && link.platform === 'kofi')
-                    );
-                    if (chips.length === 0) return null;
-                    return (
-                      <div className="flex flex-wrap gap-1.5">
-                        {chips.map((link) => {
-                          const Icon = socialIcon(link.platform);
-                          return (
-                            <a
-                              key={link.url}
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title={link.label}
-                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg-secondary/60 px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                              {link.label}
-                            </a>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
                   </div>
                 </section>
               )}

@@ -699,6 +699,7 @@ export async function fetchSubmissions(
     search?: string,
     categoryId?: number,
     sort?: string,
+    submitterId?: number,
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
@@ -735,6 +736,10 @@ export async function fetchSubmissions(
             params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
+        if (submitterId && submitterId > 0) {
+            params.set('_aFilters[Generic_Submitter]', String(submitterId));
+        }
+
         if (sort && sortMap[sort]) {
             params.set('_sSort', sortMap[sort]);
         }
@@ -751,6 +756,10 @@ export async function fetchSubmissions(
 
         if (categoryId) {
             params.set('_aFilters[Generic_Category]', String(categoryId));
+        }
+
+        if (submitterId && submitterId > 0) {
+            params.set('_aFilters[Generic_Submitter]', String(submitterId));
         }
 
         if (sort && sort !== 'default' && sortMap[sort]) {
