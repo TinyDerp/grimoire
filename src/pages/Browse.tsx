@@ -66,6 +66,7 @@ type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name
 // longer a user choice: it's what small cards become below the size threshold.
 type ViewMode = 'grid' | 'compact' | 'list';
 type BrowseCardDesign = 'classic' | 'readable';
+type ModDetailsNavigationDirection = 'previous' | 'next';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 // Persist filter UI inputs across page navigation. The store keeps these in
@@ -918,6 +919,8 @@ export default function Browse() {
   const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
   const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
+  const [modalNavigation, setModalNavigation] = useState<{ direction: ModDetailsNavigationDirection; label: string } | null>(null);
+  const modalNavigationRequestRef = useRef(0);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number } | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -1926,42 +1929,68 @@ export default function Browse() {
     setRefreshKey((k) => k + 1);
   }, []);
 
+  const applyLoadedModDetails = async (mod: GameBananaMod, details: GameBananaModDetails) => {
+    setSelectedMod(details);
+    setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+
+    // Update the mods array with the correct nsfw flag from details
+    // This ensures grid cards show blur after clicking once
+    if (details.nsfw !== mod.nsfw) {
+      setMods(prev => prev.map(m =>
+        m.id === mod.id ? { ...m, nsfw: details.nsfw } : m
+      ));
+
+      // Also update the local cache so future browses show correct status
+      try {
+        await window.electronAPI.updateModNsfw(mod.id, details.nsfw);
+      } catch (cacheErr) {
+        console.warn('Failed to update NSFW cache:', cacheErr);
+      }
+    }
+
+    // Cache the download count from mod details (sum across all files)
+    if (details.files && details.files.length > 0) {
+      const totalDownloads = details.files.reduce((sum, f) => sum + (f.downloadCount || 0), 0);
+      try {
+        await window.electronAPI.updateModDownloadCount(mod.id, totalDownloads);
+        // Update local state so the card shows the count immediately
+        setMods(prev => prev.map(m =>
+          m.id === mod.id ? { ...m, downloadCount: totalDownloads } : m
+        ));
+      } catch (cacheErr) {
+        console.warn('Failed to cache download count:', cacheErr);
+      }
+    }
+  };
+
   const handleModClick = async (mod: GameBananaMod) => {
     try {
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
-      setSelectedMod(details);
-      setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
-
-      // Update the mods array with the correct nsfw flag from details
-      // This ensures grid cards show blur after clicking once
-      if (details.nsfw !== mod.nsfw) {
-        setMods(prev => prev.map(m =>
-          m.id === mod.id ? { ...m, nsfw: details.nsfw } : m
-        ));
-
-        // Also update the local cache so future browses show correct status
-        try {
-          await window.electronAPI.updateModNsfw(mod.id, details.nsfw);
-        } catch (cacheErr) {
-          console.warn('Failed to update NSFW cache:', cacheErr);
-        }
-      }
-
-      // Cache the download count from mod details (sum across all files)
-      if (details.files && details.files.length > 0) {
-        const totalDownloads = details.files.reduce((sum, f) => sum + (f.downloadCount || 0), 0);
-        try {
-          await window.electronAPI.updateModDownloadCount(mod.id, totalDownloads);
-          // Update local state so the card shows the count immediately
-          setMods(prev => prev.map(m =>
-            m.id === mod.id ? { ...m, downloadCount: totalDownloads } : m
-          ));
-        } catch (cacheErr) {
-          console.warn('Failed to cache download count:', cacheErr);
-        }
-      }
+      await applyLoadedModDetails(mod, details);
     } catch (err) {
       setError(String(err));
+    }
+  };
+
+  const handleNavigateMod = async (mod: GameBananaMod, direction: ModDetailsNavigationDirection) => {
+    if (modalNavigation) return;
+
+    const requestId = modalNavigationRequestRef.current + 1;
+    modalNavigationRequestRef.current = requestId;
+    setModalNavigation({ direction, label: mod.name });
+
+    try {
+      const details = await getModDetails(mod.id, section, { includeSubmitter: true });
+      if (modalNavigationRequestRef.current !== requestId) return;
+      await applyLoadedModDetails(mod, details);
+    } catch (err) {
+      if (modalNavigationRequestRef.current === requestId) {
+        setError(String(err));
+      }
+    } finally {
+      if (modalNavigationRequestRef.current === requestId) {
+        setModalNavigation(null);
+      }
     }
   };
 
@@ -2248,6 +2277,12 @@ export default function Browse() {
     selectedModIndex >= 0 && selectedModIndex < displayMods.length - 1
       ? displayMods[selectedModIndex + 1]
       : undefined;
+  const closeSelectedMod = () => {
+    modalNavigationRequestRef.current += 1;
+    setModalNavigation(null);
+    setSelectedMod(null);
+    setSelectedModDates(null);
+  };
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =
@@ -2954,12 +2989,15 @@ export default function Browse() {
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           dateAdded={selectedModDates?.dateAdded}
           dateModified={selectedModDates?.dateModified}
-          onClose={() => setSelectedMod(null)}
+          isNavigating={!!modalNavigation}
+          navigationDirection={modalNavigation?.direction}
+          navigationLabel={modalNavigation?.label}
+          onClose={closeSelectedMod}
           onDownload={handleDownload}
           onNavigatePrevious={
-            previousSelectedMod ? () => void handleModClick(previousSelectedMod) : undefined
+            previousSelectedMod ? () => void handleNavigateMod(previousSelectedMod, 'previous') : undefined
           }
-          onNavigateNext={nextSelectedMod ? () => void handleModClick(nextSelectedMod) : undefined}
+          onNavigateNext={nextSelectedMod ? () => void handleNavigateMod(nextSelectedMod, 'next') : undefined}
           previousLabel={previousSelectedMod?.name}
           nextLabel={nextSelectedMod?.name}
           onDeleteFile={deleteMod}

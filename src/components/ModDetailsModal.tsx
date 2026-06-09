@@ -32,6 +32,8 @@ import { Skeleton } from './common/Skeleton';
 import { ArchivedTag } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
 
+type ModDetailsNavigationDirection = 'previous' | 'next';
+
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
   section: string;
@@ -58,6 +60,9 @@ interface ModDetailsModalProps {
   hideNsfwPreviews: boolean;
   dateAdded?: number;
   dateModified?: number;
+  isNavigating?: boolean;
+  navigationDirection?: ModDetailsNavigationDirection;
+  navigationLabel?: string;
   updateAvailable?: boolean;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
@@ -90,6 +95,9 @@ export default function ModDetailsModal({
   hideNsfwPreviews,
   dateAdded,
   dateModified,
+  isNavigating = false,
+  navigationDirection = 'next',
+  navigationLabel,
   updateAvailable,
   ignoreUpdates,
   onToggleIgnoreUpdates,
@@ -209,7 +217,7 @@ export default function ModDetailsModal({
       if (lightboxOpen && images.length > 1) {
         if (e.key === 'ArrowLeft') goToPrevious();
         if (e.key === 'ArrowRight') goToNext();
-      } else if (!deleteCandidate) {
+      } else if (!deleteCandidate && !isNavigating) {
         const target = e.target as HTMLElement | null;
         const tag = target?.tagName?.toLowerCase();
         const editing =
@@ -264,6 +272,7 @@ export default function ModDetailsModal({
     lightboxOpen,
     deleteCandidate,
     deleteInProgress,
+    isNavigating,
     onNavigatePrevious,
     onNavigateNext,
   ]);
@@ -309,6 +318,11 @@ export default function ModDetailsModal({
   const submitterProfileUrl = mod.submitter?.profileUrl
     ?? (mod.submitter && mod.submitter.id > 0 ? `https://gamebanana.com/members/${mod.submitter.id}` : undefined);
   const submitterKofiUrl = mod.submitter?.kofiUrl;
+  const modalBodyTransitionClass = isNavigating
+    ? navigationDirection === 'previous'
+      ? 'mod-details-body--loading-previous'
+      : 'mod-details-body--loading-next'
+    : '';
   const formatUpdateVersion = (version: string) =>
     version.trim().match(/^v/i) ? version.trim() : `v${version.trim()}`;
 
@@ -379,7 +393,7 @@ export default function ModDetailsModal({
     return (
       <div
         key={file.id}
-        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+        className={`grid grid-cols-[auto,minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-3 rounded-lg border transition-colors sm:grid-cols-[auto,minmax(0,1fr),auto] ${
           isUpdate
             ? 'border-accent/40 bg-accent/5'
             : isActive
@@ -391,7 +405,7 @@ export default function ModDetailsModal({
                   : 'border-border bg-bg-tertiary'
         }`}
       >
-        <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
+        <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${
           isUpdate
             ? 'bg-accent/15 text-accent'
             : isActive
@@ -404,9 +418,9 @@ export default function ModDetailsModal({
         }`}>
           <FileArchive className="w-5 h-5" />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
+        <div className="min-w-0">
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
             {archived && <ArchivedTag />}
             {isActive && (
               <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
@@ -419,15 +433,15 @@ export default function ModDetailsModal({
               {file.description}
             </p>
           )}
-          <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
-            <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
+            <span className="whitespace-nowrap">{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
             <span className="opacity-50">-</span>
-            <span>{file.downloadCount.toLocaleString()} downloads</span>
+            <span className="whitespace-nowrap">{file.downloadCount.toLocaleString()} downloads</span>
             {file.dateAdded && file.dateAdded > 0 && (
               <>
                 <span className="opacity-50">-</span>
                 <span
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 whitespace-nowrap"
                   title={`Uploaded ${formatDate(file.dateAdded)} ${new Date(file.dateAdded * 1000).toLocaleTimeString()}`}
                 >
                   <Clock className="w-3 h-3" />
@@ -445,14 +459,14 @@ export default function ModDetailsModal({
             </div>
           )}
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-2 sm:col-start-3 sm:row-start-1">
           {showEnablePill && installedFileState && (
             <button
               type="button"
               onClick={() => onEnableFile!(installedFileState.modId)}
               disabled={isBusyThis}
               title="Enable this mod"
-              className="flex items-center justify-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <Power className="w-3.5 h-3.5" />
               Enable
@@ -474,7 +488,7 @@ export default function ModDetailsModal({
             type="button"
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
-            className={`flex min-w-[110px] items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
+            className={`flex min-w-[110px] max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
               isUpdate || !isInstalled
                 ? 'border-accent/45 bg-accent/10 text-text-primary hover:border-accent/65 hover:bg-accent/20'
                 : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-primary'
@@ -502,6 +516,79 @@ export default function ModDetailsModal({
     );
   };
 
+  const navigationSkeleton = (
+    <div
+      className="mod-details-navigation-skeleton absolute inset-0 bg-bg-secondary"
+      aria-hidden
+    >
+      <div className="flex h-full min-h-0 flex-col overflow-hidden lg:flex-row">
+        <div className="lg:w-[460px] lg:flex-shrink-0 p-5 lg:pr-3 space-y-3 overflow-hidden">
+          <Skeleton className="aspect-[16/9] w-full" rounded="lg" />
+          <Skeleton className="aspect-[16/10] w-full" rounded="lg" />
+          <div className="rounded-lg border border-border bg-bg-tertiary p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Skeleton className="h-4 w-4" rounded="full" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-9 w-full" rounded="lg" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0 p-5 lg:pl-3 space-y-5 overflow-hidden">
+          <section>
+            <Skeleton className="mb-2 h-3 w-16" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-7 w-20" rounded="md" />
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-2 h-3 w-14" />
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-11/12" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-2 h-3 w-20" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-bg-tertiary p-3">
+                  <Skeleton className="h-10 w-10 flex-shrink-0" rounded="md" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-3 w-3/4" />
+                    <Skeleton className="h-2.5 w-1/2" />
+                  </div>
+                  <Skeleton className="h-9 w-24 flex-shrink-0" rounded="md" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-3 h-3 w-24" />
+            <div className="space-y-3">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex gap-3">
+                  <Skeleton className="h-7 w-7 flex-shrink-0" rounded="full" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-2.5 w-full" />
+                    <Skeleton className="h-2.5 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+
   if (typeof document === 'undefined') return null;
 
   const modal = (
@@ -510,7 +597,8 @@ export default function ModDetailsModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={mod.name}
+      aria-label={isNavigating ? navigationLabel ?? 'Loading mod details' : mod.name}
+      aria-busy={isNavigating}
     >
       <div
         className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl"
@@ -519,29 +607,39 @@ export default function ModDetailsModal({
         {onNavigatePrevious && !lightboxOpen && (
           <button
             type="button"
+            disabled={isNavigating}
             onClick={(e) => {
               e.stopPropagation();
               onNavigatePrevious();
             }}
             aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
             title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
-            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
-            <ChevronLeft className="h-8 w-8" />
+            {isNavigating && navigationDirection === 'previous' ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <ChevronLeft className="h-8 w-8" />
+            )}
           </button>
         )}
         {onNavigateNext && !lightboxOpen && (
           <button
             type="button"
+            disabled={isNavigating}
             onClick={(e) => {
               e.stopPropagation();
               onNavigateNext();
             }}
             aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
             title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
-            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
-            <ChevronRight className="h-8 w-8" />
+            {isNavigating && navigationDirection === 'next' ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <ChevronRight className="h-8 w-8" />
+            )}
           </button>
         )}
         {/* Header. Status badges, title, and dense metadata stay compact so
@@ -605,17 +703,24 @@ export default function ModDetailsModal({
               </span>
             )}
           </div>
-          <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={mod.name}>
-            <a
-              href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`View ${mod.name} on GameBanana`}
-              className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
-            >
-              <span className="min-w-0 truncate">{mod.name}</span>
-              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-            </a>
+          <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={isNavigating ? navigationLabel : mod.name}>
+            {isNavigating ? (
+              <span className="inline-flex w-full max-w-sm items-center gap-2">
+                <Skeleton className="h-5 w-full max-w-[20rem]" />
+                <span className="sr-only">Loading {navigationLabel ?? 'mod details'}</span>
+              </span>
+            ) : (
+              <a
+                href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`View ${mod.name} on GameBanana`}
+                className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+              >
+                <span className="min-w-0 truncate">{mod.name}</span>
+                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+              </a>
+            )}
           </h2>
           {(() => {
             // Hide the modified date when it formats to the same day as the
@@ -723,7 +828,8 @@ export default function ModDetailsModal({
             two independently-scrollable columns on lg+. Independent scroll
             on wide is critical now that previews stack vertically: scrolling
             comments shouldn't drag the image column away, and vice versa. */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        <div className={`mod-details-body relative flex-1 min-h-0 overflow-hidden ${modalBodyTransitionClass}`}>
+          <div className="mod-details-body-content flex h-full min-h-0 flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
             {/* Image / preview column */}
             <div className="lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pr-3 space-y-3">
               {images.length > 0 ? (
@@ -1104,6 +1210,8 @@ export default function ModDetailsModal({
                 View on GameBanana
               </a>
             </div>
+          </div>
+          {isNavigating && navigationSkeleton}
         </div>
       </div>
 
