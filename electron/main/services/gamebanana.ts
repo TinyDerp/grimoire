@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
+import { GRIMOIRE_USER_AGENT } from './userAgent';
 
 // Debounce the rate-limit warning so a burst of 429s (e.g. the unknown-mod CRC
 // matcher fanning out) produces one toast, not a flood. Broadcasting via
@@ -441,7 +442,7 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
             const response = await fetch(url, {
                 headers: {
                     Accept: 'application/json',
-                    'User-Agent': 'DeadlockModManager/1.0',
+                    'User-Agent': GRIMOIRE_USER_AGENT,
                 },
                 signal: request.signal,
             });
