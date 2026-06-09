@@ -50,6 +50,7 @@ export interface BrowseModsArgs {
 export interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 export interface DownloadModArgs {

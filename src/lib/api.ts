@@ -393,8 +393,12 @@ export async function getModFileList(modId: number, section?: string): Promise<G
   return window.electronAPI.getModFileList({ modId, section });
 }
 
-export async function getModDetails(modId: number, section?: string): Promise<GameBananaModDetails> {
-  return window.electronAPI.getModDetails({ modId, section });
+export async function getModDetails(
+  modId: number,
+  section?: string,
+  options: { includeSubmitter?: boolean } = {}
+): Promise<GameBananaModDetails> {
+  return window.electronAPI.getModDetails({ modId, section, ...options });
 }
 
 export async function getModComments(modId: number, section?: string, page = 1): Promise<GameBananaCommentsResponse> {

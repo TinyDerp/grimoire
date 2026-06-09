@@ -406,6 +406,7 @@ interface BrowseModsArgs {
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 interface GetModCommentsArgs {
@@ -580,9 +581,11 @@ interface GameBananaModDetails {
     id: number;
     name: string;
     description?: string;
+    nsfw?: boolean;
     category?: unknown;
     files?: unknown[];
     previewMedia?: unknown;
+    submitter?: unknown;
 }
 
 interface GameBananaModFileList {

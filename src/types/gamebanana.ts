@@ -37,6 +37,8 @@ export interface GameBananaSubmitter {
   id: number;
   name: string;
   avatarUrl?: string;
+  profileUrl?: string;
+  kofiUrl?: string;
 }
 
 export interface GameBananaPreviewMedia {
@@ -89,6 +91,7 @@ export interface GameBananaModDetails {
   category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
+  submitter?: GameBananaSubmitter;
 }
 
 export interface GameBananaModFileList {

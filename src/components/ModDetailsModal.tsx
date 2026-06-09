@@ -20,6 +20,7 @@ import {
   BellOff,
   Bell,
   Trash2,
+  Coffee,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
@@ -305,6 +306,9 @@ export default function ModDetailsModal({
   const archivedFiles = files.filter((file) => file.isArchived);
   const totalDownloads = files.reduce((sum, f) => sum + f.downloadCount, 0);
   const outdated = dateModified ? isModOutdated(dateModified) : false;
+  const submitterProfileUrl = mod.submitter?.profileUrl
+    ?? (mod.submitter && mod.submitter.id > 0 ? `https://gamebanana.com/members/${mod.submitter.id}` : undefined);
+  const submitterKofiUrl = mod.submitter?.kofiUrl;
   const formatUpdateVersion = (version: string) =>
     version.trim().match(/^v/i) ? version.trim() : `v${version.trim()}`;
 
@@ -540,9 +544,8 @@ export default function ModDetailsModal({
             <ChevronRight className="h-8 w-8" />
           </button>
         )}
-        {/* Header - single row. Status badges, category, title, and dense
-            metadata cluster all fit on one line so the modal's vertical
-            budget goes to content, not chrome. Title shrinks/truncates
+        {/* Header. Status badges, title, and dense metadata stay compact so
+            the modal's vertical budget goes to content. Title shrinks/truncates
             first when space gets tight; metadata hides on narrow screens. */}
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -832,6 +835,42 @@ export default function ModDetailsModal({
                 Independently scrollable on lg+ so reading comments or
                 installing a file doesn't move the image stack on the left. */}
             <div className="flex-1 min-w-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pl-3 space-y-5">
+              {mod.submitter && (
+                <section>
+                  <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
+                    Artist
+                  </h3>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-text-secondary">
+                    {submitterProfileUrl ? (
+                      <a
+                        href={submitterProfileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`View ${mod.submitter.name} on GameBanana`}
+                        className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-medium text-text-primary transition-colors hover:text-accent"
+                      >
+                        <span className="min-w-0 truncate">{mod.submitter.name}</span>
+                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                      </a>
+                    ) : (
+                      <span className="min-w-0 truncate font-medium text-text-primary">{mod.submitter.name}</span>
+                    )}
+                    {submitterKofiUrl && (
+                      <a
+                        href={submitterKofiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Support ${mod.submitter.name} on Ko-fi`}
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:border-accent/50 hover:bg-accent/20"
+                      >
+                        <Coffee className="h-3.5 w-3.5" />
+                        Ko-fi
+                      </a>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {mod.description && (
                 <section>
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">

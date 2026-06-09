@@ -1928,7 +1928,7 @@ export default function Browse() {
 
   const handleModClick = async (mod: GameBananaMod) => {
     try {
-      const details = await getModDetails(mod.id, section);
+      const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       setSelectedMod(details);
       setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
 
@@ -2009,7 +2009,8 @@ export default function Browse() {
       // highest download count. Forum feedback flagged that — surface the
       // details modal so the user can choose which file to install.
       if (details.files.length > 1) {
-        setSelectedMod(details);
+        const enrichedDetails = await getModDetails(mod.id, section, { includeSubmitter: true });
+        setSelectedMod(enrichedDetails);
         setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
         return;
       }

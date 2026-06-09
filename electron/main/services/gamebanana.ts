@@ -60,6 +60,8 @@ export interface GameBananaSubmitter {
     id: number;
     name: string;
     avatarUrl?: string;
+    profileUrl?: string;
+    kofiUrl?: string;
 }
 
 export interface GameBananaPreviewMedia {
@@ -161,6 +163,7 @@ export interface GameBananaModDetails {
     category?: GameBananaCategory;
     files?: GameBananaFile[];
     previewMedia?: GameBananaPreviewMedia;
+    submitter?: GameBananaSubmitter;
 }
 
 export interface GameBananaCollection {
@@ -232,7 +235,9 @@ interface ModRaw {
     _aSubmitter?: {
         _idRow: number;
         _sName: string;
+        _sProfileUrl?: string;
         _sAvatarUrl?: string;
+        _aDonationMethods?: DonationMethodRaw[];
     };
     _aPreviewMedia?: {
         _aImages?: Array<{
@@ -331,6 +336,14 @@ interface ModDetailsRaw {
     _aFiles?: FileRaw[];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
     _aCategory?: ModRaw['_aRootCategory'];
+    _aSubmitter?: ModRaw['_aSubmitter'];
+}
+
+interface DonationMethodRaw {
+    _sTitle?: string;
+    _sValue?: string;
+    _sIconClasses?: string;
+    _bIsUrl?: boolean;
 }
 
 interface CollectionRaw {
@@ -550,13 +563,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         // _bIsNsfw is only returned by detail API, but _bHasContentRatings is returned by list API
         // and correlates with NSFW status, so use it as fallback
         nsfw: raw._bIsNsfw ?? raw._bHasContentRatings ?? false,
-        submitter: raw._aSubmitter
-            ? {
-                id: raw._aSubmitter._idRow,
-                name: raw._aSubmitter._sName,
-                avatarUrl: raw._aSubmitter._sAvatarUrl,
-            }
-            : undefined,
+        submitter: mapSubmitter(raw._aSubmitter),
         previewMedia: (raw._aPreviewMedia?._aImages || raw._aPreviewMedia?._aMetadata)
             ? {
                 images: raw._aPreviewMedia._aImages
@@ -768,10 +775,24 @@ export async function fetchSubmissions(
  */
 export async function fetchModDetails(
     modId: number,
-    section = 'Mod'
+    section = 'Mod',
+    options: { includeSubmitter?: boolean } = {}
 ): Promise<GameBananaModDetails> {
     // Fetch mod details with NSFW flag
-    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_sName,_sText,_bIsNsfw,_aCategory,_aFiles,_aPreviewMedia`;
+    const fields = [
+        '_idRow',
+        '_sName',
+        '_sText',
+        '_bIsNsfw',
+        '_aCategory',
+        '_aFiles',
+        '_aPreviewMedia',
+    ];
+    if (options.includeSubmitter) {
+        fields.push('_aSubmitter');
+    }
+    const params = new URLSearchParams({ _csvProperties: fields.join(',') });
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?${params.toString()}`;
     debugGameBanana('[fetchModDetails] URL:', url);
     const raw = await fetchJson<ModDetailsRaw>(url);
 
@@ -812,6 +833,7 @@ export async function fetchModDetails(
                     : undefined,
             }
         : undefined,
+        submitter: mapSubmitter(raw._aSubmitter),
     };
 }
 
@@ -1009,7 +1031,38 @@ function mapSubmitter(raw: ModRaw['_aSubmitter']): GameBananaSubmitter | undefin
         id: raw._idRow,
         name: raw._sName,
         avatarUrl: raw._sAvatarUrl,
+        profileUrl: raw._sProfileUrl,
+        kofiUrl: extractKofiUrl(raw._aDonationMethods),
     };
+}
+
+function extractKofiUrl(methods: DonationMethodRaw[] | undefined): string | undefined {
+    for (const method of methods ?? []) {
+        const title = method._sTitle?.toLowerCase() ?? '';
+        const icon = method._sIconClasses?.toLowerCase() ?? '';
+        if (!title.includes('ko-fi') && !title.includes('kofi') && !icon.includes('kofi')) {
+            continue;
+        }
+
+        const url = normalizeKofiUrl(method._sValue);
+        if (url) return url;
+    }
+    return undefined;
+}
+
+function normalizeKofiUrl(value: string | undefined): string | undefined {
+    const trimmed = value?.trim();
+    if (!trimmed) return undefined;
+
+    try {
+        const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+        const hostname = url.hostname.toLowerCase();
+        if (hostname !== 'ko-fi.com' && hostname !== 'www.ko-fi.com') return undefined;
+        return url.toString();
+    } catch {
+        return undefined;
+    }
 }
 
 function mapPreviewMedia(raw: ModRaw['_aPreviewMedia']): GameBananaPreviewMedia | undefined {

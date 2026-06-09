@@ -35,6 +35,7 @@ interface BrowseModsArgs {
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 interface GetModCommentsArgs {
@@ -77,8 +78,8 @@ ipcMain.handle(
 ipcMain.handle(
     'get-mod-details',
     async (_, args: GetModDetailsArgs): Promise<GameBananaModDetails> => {
-        const { modId, section = 'Mod' } = args;
-        const details = await fetchModDetails(modId, section);
+        const { modId, section = 'Mod', includeSubmitter } = args;
+        const details = await fetchModDetails(modId, section, { includeSubmitter });
 
         // Enrich local cache with the NSFW flag from detail response
         try {
