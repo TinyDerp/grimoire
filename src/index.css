@@ -693,6 +693,54 @@ body {
   }
 }
 
+@keyframes modDetailsContentOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0.2;
+    transform: translateX(-28px);
+  }
+}
+
+@keyframes modDetailsContentOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0.2;
+    transform: translateX(28px);
+  }
+}
+
+@keyframes modDetailsSkeletonInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(44px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes modDetailsSkeletonInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-44px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .animate-slide-in-left {
   animation: slideInLeft 0.4s ease-out forwards;
 }
@@ -703,6 +751,29 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+.mod-details-body-content,
+.mod-details-navigation-skeleton {
+  will-change: transform, opacity;
+}
+
+.mod-details-body--loading-next .mod-details-body-content {
+  animation: modDetailsContentOutLeft 180ms ease-out forwards;
+  pointer-events: none;
+}
+
+.mod-details-body--loading-previous .mod-details-body-content {
+  animation: modDetailsContentOutRight 180ms ease-out forwards;
+  pointer-events: none;
+}
+
+.mod-details-body--loading-next .mod-details-navigation-skeleton {
+  animation: modDetailsSkeletonInFromRight 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.mod-details-body--loading-previous .mod-details-navigation-skeleton {
+  animation: modDetailsSkeletonInFromLeft 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .grimoire-sidebar {
@@ -965,6 +1036,10 @@ body {
   .animate-slide-in-left,
   .animate-hero-zoom-in,
   .animate-fade-in,
+  .mod-details-body--loading-next .mod-details-body-content,
+  .mod-details-body--loading-previous .mod-details-body-content,
+  .mod-details-body--loading-next .mod-details-navigation-skeleton,
+  .mod-details-body--loading-previous .mod-details-navigation-skeleton,
   .skeleton-shimmer,
   .browse-action-button--downloading::after,
   .browse-action-button--complete-pop,
@@ -997,6 +1072,11 @@ body {
 
   .browse-card-media-zoom {
     transform: none !important;
+    will-change: auto;
+  }
+
+  .mod-details-body-content,
+  .mod-details-navigation-skeleton {
     will-change: auto;
   }
 

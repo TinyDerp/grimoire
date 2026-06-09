@@ -37,6 +37,19 @@ export interface GameBananaSubmitter {
   id: number;
   name: string;
   avatarUrl?: string;
+  profileUrl?: string;
+  kofiUrl?: string;
+}
+
+/** A social/contact link from an artist's GameBanana profile (Bluesky, YouTube,
+ *  Discord, personal site, etc.). Fetched lazily from the member ProfilePage
+ *  since the mod's submitter payload doesn't carry these. */
+export interface GameBananaArtistLink {
+  /** Human label as configured on GameBanana, e.g. "Bluesky", "YouTube". */
+  label: string;
+  /** Lowercased platform key for icon mapping, e.g. "bluesky", "youtube". */
+  platform: string;
+  url: string;
 }
 
 export interface GameBananaPreviewMedia {
@@ -89,6 +102,7 @@ export interface GameBananaModDetails {
   category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
+  submitter?: GameBananaSubmitter;
 }
 
 export interface GameBananaModFileList {

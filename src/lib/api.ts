@@ -11,6 +11,7 @@ import type {
   GameBananaModUpdatesResponse,
   GameBananaCollection,
   GameBananaCollectionItemsResponse,
+  GameBananaArtistLink,
 } from '../types/gamebanana';
 
 // Re-export types for convenience
@@ -384,17 +385,22 @@ export async function browseMods(
   search?: string,
   section?: string,
   categoryId?: number,
-  sort?: string
+  sort?: string,
+  submitterId?: number
 ): Promise<GameBananaModsResponse> {
-  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort });
+  return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort, submitterId });
 }
 
 export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {
   return window.electronAPI.getModFileList({ modId, section });
 }
 
-export async function getModDetails(modId: number, section?: string): Promise<GameBananaModDetails> {
-  return window.electronAPI.getModDetails({ modId, section });
+export async function getModDetails(
+  modId: number,
+  section?: string,
+  options: { includeSubmitter?: boolean } = {}
+): Promise<GameBananaModDetails> {
+  return window.electronAPI.getModDetails({ modId, section, ...options });
 }
 
 export async function getModComments(modId: number, section?: string, page = 1): Promise<GameBananaCommentsResponse> {
@@ -403,6 +409,10 @@ export async function getModComments(modId: number, section?: string, page = 1):
 
 export async function getModUpdates(modId: number, section?: string, page = 1): Promise<GameBananaModUpdatesResponse> {
   return window.electronAPI.getModUpdates({ modId, section, page });
+}
+
+export async function getSubmitterLinks(memberId: number): Promise<GameBananaArtistLink[]> {
+  return window.electronAPI.getSubmitterLinks(memberId);
 }
 
 export async function downloadMod(

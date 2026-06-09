@@ -8,6 +8,7 @@ import {
     fetchModFileList,
     fetchModComments,
     fetchModUpdates,
+    fetchSubmitterLinks,
     fetchCollection,
     fetchCollectionItems,
     GameBananaSection,
@@ -30,11 +31,13 @@ interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 interface GetModCommentsArgs {
@@ -68,8 +71,8 @@ function getActiveDeadlockPath(): string | null {
 ipcMain.handle(
     'browse-mods',
     async (_, args: BrowseModsArgs): Promise<GameBananaModsResponse> => {
-        const { page, perPage, search, section = 'Mod', categoryId, sort } = args;
-        return fetchSubmissions(section, page, perPage, search, categoryId, sort);
+        const { page, perPage, search, section = 'Mod', categoryId, sort, submitterId } = args;
+        return fetchSubmissions(section, page, perPage, search, categoryId, sort, submitterId);
     }
 );
 
@@ -77,8 +80,8 @@ ipcMain.handle(
 ipcMain.handle(
     'get-mod-details',
     async (_, args: GetModDetailsArgs): Promise<GameBananaModDetails> => {
-        const { modId, section = 'Mod' } = args;
-        const details = await fetchModDetails(modId, section);
+        const { modId, section = 'Mod', includeSubmitter } = args;
+        const details = await fetchModDetails(modId, section, { includeSubmitter });
 
         // Enrich local cache with the NSFW flag from detail response
         try {
@@ -162,6 +165,14 @@ ipcMain.handle(
     async (_, args: GetModUpdatesArgs): Promise<GameBananaModUpdatesResponse> => {
         const { modId, section = 'Mod', page = 1 } = args;
         return fetchModUpdates(modId, section, page);
+    }
+);
+
+// get-submitter-links — artist social/contact links from their member profile
+ipcMain.handle(
+    'get-submitter-links',
+    async (_, memberId: number) => {
+        return fetchSubmitterLinks(memberId);
     }
 );
 

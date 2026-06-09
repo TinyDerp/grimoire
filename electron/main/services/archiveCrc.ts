@@ -1,5 +1,6 @@
 import { createReadStream } from 'fs';
 import { validateDownloadUrl } from './security';
+import { GRIMOIRE_USER_AGENT } from './userAgent';
 
 export interface ArchiveVpkCrcEntry {
     name: string;
@@ -194,7 +195,7 @@ async function fetchArchiveRange(
     const response = await fetch(url, {
         headers: {
             Range: `bytes=${start}-${end}`,
-            'User-Agent': 'DeadlockModManager/1.0',
+            'User-Agent': GRIMOIRE_USER_AGENT,
         },
         redirect: 'follow',
         signal,
@@ -245,7 +246,7 @@ async function fetchArchiveSuffixRange(
     const response = await fetch(url, {
         headers: {
             Range: `bytes=-${suffixBytes}`,
-            'User-Agent': 'DeadlockModManager/1.0',
+            'User-Agent': GRIMOIRE_USER_AGENT,
         },
         redirect: 'follow',
         signal,

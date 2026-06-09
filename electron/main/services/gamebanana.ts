@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
+import { GRIMOIRE_USER_AGENT } from './userAgent';
 
 // Debounce the rate-limit warning so a burst of 429s (e.g. the unknown-mod CRC
 // matcher fanning out) produces one toast, not a flood. Broadcasting via
@@ -60,6 +61,14 @@ export interface GameBananaSubmitter {
     id: number;
     name: string;
     avatarUrl?: string;
+    profileUrl?: string;
+    kofiUrl?: string;
+}
+
+export interface GameBananaArtistLink {
+    label: string;
+    platform: string;
+    url: string;
 }
 
 export interface GameBananaPreviewMedia {
@@ -161,6 +170,7 @@ export interface GameBananaModDetails {
     category?: GameBananaCategory;
     files?: GameBananaFile[];
     previewMedia?: GameBananaPreviewMedia;
+    submitter?: GameBananaSubmitter;
 }
 
 export interface GameBananaCollection {
@@ -232,7 +242,9 @@ interface ModRaw {
     _aSubmitter?: {
         _idRow: number;
         _sName: string;
+        _sProfileUrl?: string;
         _sAvatarUrl?: string;
+        _aDonationMethods?: DonationMethodRaw[];
     };
     _aPreviewMedia?: {
         _aImages?: Array<{
@@ -331,6 +343,14 @@ interface ModDetailsRaw {
     _aFiles?: FileRaw[];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
     _aCategory?: ModRaw['_aRootCategory'];
+    _aSubmitter?: ModRaw['_aSubmitter'];
+}
+
+interface DonationMethodRaw {
+    _sTitle?: string;
+    _sValue?: string;
+    _sIconClasses?: string;
+    _bIsUrl?: boolean;
 }
 
 interface CollectionRaw {
@@ -422,7 +442,7 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
             const response = await fetch(url, {
                 headers: {
                     Accept: 'application/json',
-                    'User-Agent': 'DeadlockModManager/1.0',
+                    'User-Agent': GRIMOIRE_USER_AGENT,
                 },
                 signal: request.signal,
             });
@@ -550,13 +570,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         // _bIsNsfw is only returned by detail API, but _bHasContentRatings is returned by list API
         // and correlates with NSFW status, so use it as fallback
         nsfw: raw._bIsNsfw ?? raw._bHasContentRatings ?? false,
-        submitter: raw._aSubmitter
-            ? {
-                id: raw._aSubmitter._idRow,
-                name: raw._aSubmitter._sName,
-                avatarUrl: raw._aSubmitter._sAvatarUrl,
-            }
-            : undefined,
+        submitter: mapSubmitter(raw._aSubmitter),
         previewMedia: (raw._aPreviewMedia?._aImages || raw._aPreviewMedia?._aMetadata)
             ? {
                 images: raw._aPreviewMedia._aImages
@@ -686,6 +700,7 @@ export async function fetchSubmissions(
     search?: string,
     categoryId?: number,
     sort?: string,
+    submitterId?: number,
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
@@ -722,6 +737,10 @@ export async function fetchSubmissions(
             params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
+        if (submitterId && submitterId > 0) {
+            params.set('_aFilters[Generic_Submitter]', String(submitterId));
+        }
+
         if (sort && sortMap[sort]) {
             params.set('_sSort', sortMap[sort]);
         }
@@ -738,6 +757,10 @@ export async function fetchSubmissions(
 
         if (categoryId) {
             params.set('_aFilters[Generic_Category]', String(categoryId));
+        }
+
+        if (submitterId && submitterId > 0) {
+            params.set('_aFilters[Generic_Submitter]', String(submitterId));
         }
 
         if (sort && sort !== 'default' && sortMap[sort]) {
@@ -768,10 +791,24 @@ export async function fetchSubmissions(
  */
 export async function fetchModDetails(
     modId: number,
-    section = 'Mod'
+    section = 'Mod',
+    options: { includeSubmitter?: boolean } = {}
 ): Promise<GameBananaModDetails> {
     // Fetch mod details with NSFW flag
-    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_sName,_sText,_bIsNsfw,_aCategory,_aFiles,_aPreviewMedia`;
+    const fields = [
+        '_idRow',
+        '_sName',
+        '_sText',
+        '_bIsNsfw',
+        '_aCategory',
+        '_aFiles',
+        '_aPreviewMedia',
+    ];
+    if (options.includeSubmitter) {
+        fields.push('_aSubmitter');
+    }
+    const params = new URLSearchParams({ _csvProperties: fields.join(',') });
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?${params.toString()}`;
     debugGameBanana('[fetchModDetails] URL:', url);
     const raw = await fetchJson<ModDetailsRaw>(url);
 
@@ -812,6 +849,7 @@ export async function fetchModDetails(
                     : undefined,
             }
         : undefined,
+        submitter: mapSubmitter(raw._aSubmitter),
     };
 }
 
@@ -1009,7 +1047,152 @@ function mapSubmitter(raw: ModRaw['_aSubmitter']): GameBananaSubmitter | undefin
         id: raw._idRow,
         name: raw._sName,
         avatarUrl: raw._sAvatarUrl,
+        profileUrl: raw._sProfileUrl,
+        kofiUrl: extractKofiUrl(raw._aDonationMethods),
     };
+}
+
+interface ContactInfoRaw {
+    _sTitle?: string;
+    _sValue?: string;
+    _sIconClasses?: string;
+    _sValueTemplate?: string;
+}
+
+interface ProfilePageRaw {
+    _bIsPrivate?: boolean;
+    _aContactInfo?: ContactInfoRaw[];
+}
+
+// Artist social links aren't carried on a mod's submitter payload; they live on
+// the member's profile. Cache per member id so reopening mods by the same
+// author (common while browsing) doesn't refetch.
+const submitterLinksCache = new Map<number, GameBananaArtistLink[]>();
+
+/**
+ * Fetch an artist's social/contact links (Bluesky, YouTube, Discord, website,
+ * etc.) from their GameBanana member profile. Best-effort: a private profile,
+ * a network error, or an empty contact list all resolve to an empty array so
+ * the details view simply shows no extra links.
+ */
+export async function fetchSubmitterLinks(memberId: number): Promise<GameBananaArtistLink[]> {
+    if (!Number.isFinite(memberId) || memberId <= 0) return [];
+
+    const cached = submitterLinksCache.get(memberId);
+    if (cached) return cached;
+
+    let links: GameBananaArtistLink[] = [];
+    try {
+        const raw = await fetchJson<ProfilePageRaw>(`${GAMEBANANA_API_BASE}/Member/${memberId}/ProfilePage`);
+        if (!raw._bIsPrivate) {
+            links = mapContactInfo(raw._aContactInfo);
+        }
+    } catch (err) {
+        // Don't cache the failure: a transient 429 or network blip would
+        // otherwise hide this artist's socials until the app restarts.
+        console.warn('[gamebanana] Failed to load submitter links:', err);
+        return [];
+    }
+
+    submitterLinksCache.set(memberId, links);
+    return links;
+}
+
+function mapContactInfo(items: ContactInfoRaw[] | undefined): GameBananaArtistLink[] {
+    const out: GameBananaArtistLink[] = [];
+    const seen = new Set<string>();
+    for (const item of items ?? []) {
+        const label = item._sTitle?.trim();
+        if (!label) continue;
+        const url = buildContactUrl(item);
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        out.push({ label, platform: normalizeContactPlatform(item._sIconClasses, label), url });
+    }
+    return out;
+}
+
+/**
+ * Resolve a contact entry's stored value into a usable absolute URL. GameBanana
+ * stores either a bare handle (combined with a `%VALUE%` href template) or, when
+ * users paste a full path, a value that already contains the host - in which
+ * case naive template substitution double-prefixes it (e.g.
+ * `bsky.app/profile/bsky.app/...`). We detect that and use the value directly.
+ */
+function buildContactUrl(item: ContactInfoRaw): string | undefined {
+    const value = item._sValue?.trim();
+    if (!value) return undefined;
+
+    let candidate: string | undefined;
+    if (/^https?:\/\//i.test(value)) {
+        candidate = value;
+    } else {
+        const hrefMatch = item._sValueTemplate?.match(/href="([^"]*%VALUE%[^"]*)"/i);
+        const templateHref = hrefMatch?.[1];
+        if (templateHref) {
+            const prefix = templateHref.split('%VALUE%')[0];
+            let host = '';
+            try {
+                host = new URL(prefix).hostname.toLowerCase();
+            } catch {
+                host = '';
+            }
+            candidate =
+                host && value.toLowerCase().includes(host)
+                    ? `https://${value.replace(/^https?:\/\//i, '')}`
+                    : templateHref.replace('%VALUE%', value);
+        } else {
+            candidate = `https://${value.replace(/^https?:\/\//i, '')}`;
+        }
+    }
+
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+        return url.toString();
+    } catch {
+        return undefined;
+    }
+}
+
+// GameBanana tags each contact with an icon class like
+// "ContactTypeIcon BlueskyIcon"; pull the platform token out of it (ignoring the
+// generic "ContactType" prefix), falling back to a slug of the label.
+function normalizeContactPlatform(iconClasses: string | undefined, label: string): string {
+    const tokens = [...(iconClasses ?? '').matchAll(/([A-Za-z0-9]+)Icon\b/g)]
+        .map((m) => m[1].toLowerCase())
+        .filter((token) => token !== 'contacttype');
+    if (tokens.length > 0) return tokens[0];
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function extractKofiUrl(methods: DonationMethodRaw[] | undefined): string | undefined {
+    for (const method of methods ?? []) {
+        const title = method._sTitle?.toLowerCase() ?? '';
+        const icon = method._sIconClasses?.toLowerCase() ?? '';
+        if (!title.includes('ko-fi') && !title.includes('kofi') && !icon.includes('kofi')) {
+            continue;
+        }
+
+        const url = normalizeKofiUrl(method._sValue);
+        if (url) return url;
+    }
+    return undefined;
+}
+
+function normalizeKofiUrl(value: string | undefined): string | undefined {
+    const trimmed = value?.trim();
+    if (!trimmed) return undefined;
+
+    try {
+        const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+        const hostname = url.hostname.toLowerCase();
+        if (hostname !== 'ko-fi.com' && hostname !== 'www.ko-fi.com') return undefined;
+        return url.toString();
+    } catch {
+        return undefined;
+    }
 }
 
 function mapPreviewMedia(raw: ModRaw['_aPreviewMedia']): GameBananaPreviewMedia | undefined {

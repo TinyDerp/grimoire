@@ -35,6 +35,7 @@ import type {
     GameBananaCategoryNode,
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
+    GameBananaArtistLink,
 } from './gamebanana';
 import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from './portrait';
 
@@ -45,11 +46,13 @@ export interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 export interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 export interface DownloadModArgs {
@@ -407,6 +410,7 @@ export interface ElectronAPI {
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
     getModUpdates: (args: { modId: number; section?: string; page?: number }) => Promise<GameBananaModUpdatesResponse>;
+    getSubmitterLinks: (memberId: number) => Promise<GameBananaArtistLink[]>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;

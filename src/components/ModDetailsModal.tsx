@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Volume2,
@@ -17,9 +17,11 @@ import {
   CheckCircle2,
   Power,
   Maximize2,
+  PanelRight,
   BellOff,
   Bell,
   Trash2,
+  Coffee,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
@@ -30,6 +32,8 @@ import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
 import { ArchivedTag } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
+
+type ModDetailsNavigationDirection = 'previous' | 'next';
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
@@ -57,6 +61,9 @@ interface ModDetailsModalProps {
   hideNsfwPreviews: boolean;
   dateAdded?: number;
   dateModified?: number;
+  isNavigating?: boolean;
+  navigationDirection?: ModDetailsNavigationDirection;
+  navigationLabel?: string;
   updateAvailable?: boolean;
   /** When provided, render a toggle next to the Update/Installed badge that
    *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
@@ -72,6 +79,17 @@ interface ModDetailsModalProps {
   /** Browse-only file removal. Receives the local installed mod id that backs
    *  the GameBanana file row. */
   onDeleteFile?: (modId: string) => Promise<void> | void;
+  /** 'modal' (centered overlay, the default) or 'sidebar' (docked right-side
+   *  panel that lets the user keep browsing the grid). The sidebar shell
+   *  (width, full-height, border) is provided by the caller; this component
+   *  fills it and forces a single-column stacked body. */
+  variant?: 'modal' | 'sidebar';
+  /** When provided, render a dock/pop-out button in the header that switches
+   *  between the two presentations. The caller persists the choice. */
+  onChangeView?: (view: 'modal' | 'sidebar') => void;
+  /** When provided, clicking the artist opens "artist mode" (a grid of all the
+   *  artist's mods) instead of their GameBanana profile. */
+  onViewArtist?: (artist: { id: number; name: string; avatarUrl?: string; profileUrl?: string; kofiUrl?: string }) => void;
 }
 
 export default function ModDetailsModal({
@@ -89,6 +107,9 @@ export default function ModDetailsModal({
   hideNsfwPreviews,
   dateAdded,
   dateModified,
+  isNavigating = false,
+  navigationDirection = 'next',
+  navigationLabel,
   updateAvailable,
   ignoreUpdates,
   onToggleIgnoreUpdates,
@@ -99,7 +120,11 @@ export default function ModDetailsModal({
   previousLabel,
   nextLabel,
   onDeleteFile,
+  variant = 'modal',
+  onChangeView,
+  onViewArtist,
 }: ModDetailsModalProps) {
+  const isSidebar = variant === 'sidebar';
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const soundVolume = useAppStore((state) => state.soundVolume);
@@ -108,6 +133,11 @@ export default function ModDetailsModal({
   // It tracks which image is currently zoomed and which one keyboard arrows
   // step through while the lightbox is open.
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  // Pointer X at the start of a sidebar-carousel swipe; compared on pointer-up
+  // to decide whether the gesture stepped to the prev/next image.
+  const swipeStartXRef = useRef<number | null>(null);
+  // Falls back to a monogram when the artist avatar URL 404s or is blocked.
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
@@ -188,6 +218,15 @@ export default function ModDetailsModal({
     };
   }, [mod.id, section]);
 
+  // Reset the image cursor when the mod changes so the sidebar carousel (and a
+  // subsequently-opened lightbox) starts on the first preview rather than a
+  // stale index that may be out of range for the new mod's image count.
+  useEffect(() => {
+    setCurrentImageIndex(0);
+    swipeStartXRef.current = null;
+    setAvatarFailed(false);
+  }, [mod.id]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -208,7 +247,7 @@ export default function ModDetailsModal({
       if (lightboxOpen && images.length > 1) {
         if (e.key === 'ArrowLeft') goToPrevious();
         if (e.key === 'ArrowRight') goToNext();
-      } else if (!deleteCandidate) {
+      } else if (!deleteCandidate && !isNavigating) {
         const target = e.target as HTMLElement | null;
         const tag = target?.tagName?.toLowerCase();
         const editing =
@@ -263,6 +302,7 @@ export default function ModDetailsModal({
     lightboxOpen,
     deleteCandidate,
     deleteInProgress,
+    isNavigating,
     onNavigatePrevious,
     onNavigateNext,
   ]);
@@ -305,6 +345,43 @@ export default function ModDetailsModal({
   const archivedFiles = files.filter((file) => file.isArchived);
   const totalDownloads = files.reduce((sum, f) => sum + f.downloadCount, 0);
   const outdated = dateModified ? isModOutdated(dateModified) : false;
+  const submitterProfileUrl = mod.submitter?.profileUrl
+    ?? (mod.submitter && mod.submitter.id > 0 ? `https://gamebanana.com/members/${mod.submitter.id}` : undefined);
+  const submitterKofiUrl = mod.submitter?.kofiUrl;
+  // When the host provides onViewArtist, the artist becomes a click target that
+  // opens "artist mode" (all of their mods) instead of the GameBanana profile.
+  const submitter = mod.submitter;
+  const openArtist =
+    submitter && submitter.id > 0 && onViewArtist
+      ? () =>
+          onViewArtist({
+            id: submitter.id,
+            name: submitter.name,
+            avatarUrl: submitter.avatarUrl,
+            profileUrl: submitterProfileUrl,
+            kofiUrl: submitterKofiUrl,
+          })
+      : undefined;
+  const avatarVisual = submitter ? (
+    submitter.avatarUrl && !avatarFailed ? (
+      <img
+        src={submitter.avatarUrl}
+        alt={submitter.name}
+        loading="lazy"
+        onError={() => setAvatarFailed(true)}
+        className="h-11 w-11 flex-shrink-0 rounded-full border border-border object-cover"
+      />
+    ) : (
+      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border border-accent/30 bg-accent/15 text-base font-bold uppercase text-accent">
+        {submitter.name.charAt(0)}
+      </div>
+    )
+  ) : null;
+  const modalBodyTransitionClass = isNavigating
+    ? navigationDirection === 'previous'
+      ? 'mod-details-body--loading-previous'
+      : 'mod-details-body--loading-next'
+    : '';
   const formatUpdateVersion = (version: string) =>
     version.trim().match(/^v/i) ? version.trim() : `v${version.trim()}`;
 
@@ -375,7 +452,7 @@ export default function ModDetailsModal({
     return (
       <div
         key={file.id}
-        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+        className={`grid grid-cols-[auto,minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-3 rounded-lg border transition-colors sm:grid-cols-[auto,minmax(0,1fr),auto] ${
           isUpdate
             ? 'border-accent/40 bg-accent/5'
             : isActive
@@ -387,7 +464,7 @@ export default function ModDetailsModal({
                   : 'border-border bg-bg-tertiary'
         }`}
       >
-        <div className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${
+        <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md ${
           isUpdate
             ? 'bg-accent/15 text-accent'
             : isActive
@@ -400,9 +477,9 @@ export default function ModDetailsModal({
         }`}>
           <FileArchive className="w-5 h-5" />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="font-medium truncate text-sm" title={file.fileName}>{file.fileName}</p>
+        <div className="min-w-0">
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
             {archived && <ArchivedTag />}
             {isActive && (
               <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
@@ -415,15 +492,15 @@ export default function ModDetailsModal({
               {file.description}
             </p>
           )}
-          <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
-            <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
+            <span className="whitespace-nowrap">{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
             <span className="opacity-50">-</span>
-            <span>{file.downloadCount.toLocaleString()} downloads</span>
+            <span className="whitespace-nowrap">{file.downloadCount.toLocaleString()} downloads</span>
             {file.dateAdded && file.dateAdded > 0 && (
               <>
                 <span className="opacity-50">-</span>
                 <span
-                  className="flex items-center gap-1"
+                  className="flex items-center gap-1 whitespace-nowrap"
                   title={`Uploaded ${formatDate(file.dateAdded)} ${new Date(file.dateAdded * 1000).toLocaleTimeString()}`}
                 >
                   <Clock className="w-3 h-3" />
@@ -441,14 +518,14 @@ export default function ModDetailsModal({
             </div>
           )}
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-2 sm:col-start-3 sm:row-start-1">
           {showEnablePill && installedFileState && (
             <button
               type="button"
               onClick={() => onEnableFile!(installedFileState.modId)}
               disabled={isBusyThis}
               title="Enable this mod"
-              className="flex items-center justify-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <Power className="w-3.5 h-3.5" />
               Enable
@@ -470,7 +547,7 @@ export default function ModDetailsModal({
             type="button"
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
-            className={`flex min-w-[110px] items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
+            className={`flex min-w-[110px] max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
               isUpdate || !isInstalled
                 ? 'border-accent/45 bg-accent/10 text-text-primary hover:border-accent/65 hover:bg-accent/20'
                 : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-primary'
@@ -498,53 +575,200 @@ export default function ModDetailsModal({
     );
   };
 
+  const navigationSkeleton = (
+    <div
+      className="mod-details-navigation-skeleton absolute inset-0 bg-bg-secondary"
+      aria-hidden
+    >
+      {/* Match the real body's layout per variant: the sidebar stacks into one
+          column, so its loading skeleton must too (the modal's lg:flex-row /
+          460px image column would overflow and clip a ~440px panel). */}
+      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${isSidebar ? '' : 'lg:flex-row'}`}>
+        <div className={`space-y-3 overflow-hidden ${isSidebar ? 'p-4' : 'lg:w-[460px] lg:flex-shrink-0 p-5 lg:pr-3'}`}>
+          <Skeleton className="aspect-[16/9] w-full" rounded="lg" />
+          {!isSidebar && <Skeleton className="aspect-[16/10] w-full" rounded="lg" />}
+          <div className="rounded-lg border border-border bg-bg-tertiary p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Skeleton className="h-4 w-4" rounded="full" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-9 w-full" rounded="lg" />
+          </div>
+        </div>
+
+        <div className={`flex-1 min-w-0 space-y-5 overflow-hidden ${isSidebar ? 'p-4' : 'p-5 lg:pl-3'}`}>
+          <section>
+            <Skeleton className="mb-2 h-3 w-16" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-7 w-20" rounded="md" />
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-2 h-3 w-14" />
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-11/12" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-2 h-3 w-20" />
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-bg-tertiary p-3">
+                  <Skeleton className="h-10 w-10 flex-shrink-0" rounded="md" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-3 w-3/4" />
+                    <Skeleton className="h-2.5 w-1/2" />
+                  </div>
+                  <Skeleton className="h-9 w-24 flex-shrink-0" rounded="md" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <Skeleton className="mb-3 h-3 w-24" />
+            <div className="space-y-3">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="flex gap-3">
+                  <Skeleton className="h-7 w-7 flex-shrink-0" rounded="full" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-2.5 w-full" />
+                    <Skeleton className="h-2.5 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+
   if (typeof document === 'undefined') return null;
+
+  // The sidebar shares this whole JSX tree with the modal; only the outer
+  // chrome and the body layout differ. The caller's <aside> supplies the
+  // sidebar's width/height/border, so here we just fill it and force the
+  // single-column stacked body (the modal's lg:flex-row two-column layout is
+  // viewport-keyed and would overflow a ~440px panel on a wide screen).
+  const outerClass = isSidebar
+    ? 'h-full w-full'
+    : 'fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in';
+  const panelClass = isSidebar
+    ? 'relative bg-bg-secondary h-full w-full overflow-hidden flex flex-col'
+    : 'relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl';
+  const bodyContentClass = isSidebar
+    ? 'mod-details-body-content flex h-full min-h-0 flex-col overflow-y-auto'
+    : 'mod-details-body-content flex h-full min-h-0 flex-col lg:flex-row overflow-y-auto lg:overflow-hidden';
+  const imageColClass = isSidebar
+    ? 'p-4 space-y-3'
+    : 'lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pr-3 space-y-3';
+  const detailsColClass = isSidebar
+    ? 'flex-1 min-w-0 p-4 space-y-5'
+    : 'flex-1 min-w-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pl-3 space-y-5';
 
   const modal = (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={mod.name}
+      className={outerClass}
+      onClick={isSidebar ? undefined : onClose}
+      // The docked sidebar is a persistent, non-blocking panel, so it's a
+      // labelled region, not a modal dialog (which would wrongly imply a
+      // focus trap / inert background to screen readers).
+      role={isSidebar ? 'region' : 'dialog'}
+      aria-modal={isSidebar ? undefined : true}
+      aria-label={isNavigating ? navigationLabel ?? 'Loading mod details' : mod.name}
+      aria-busy={isNavigating}
     >
       <div
-        className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className={panelClass}
+        onClick={isSidebar ? undefined : (e) => e.stopPropagation()}
       >
-        {onNavigatePrevious && !lightboxOpen && (
+        {/* Big floating step arrows belong to the centered modal only; they sit
+            outside the panel (-left-16/-right-16) which a clipped sidebar can't
+            show. The sidebar gets compact inline arrows in its header instead. */}
+        {!isSidebar && onNavigatePrevious && !lightboxOpen && (
           <button
             type="button"
+            disabled={isNavigating}
             onClick={(e) => {
               e.stopPropagation();
               onNavigatePrevious();
             }}
             aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
             title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
-            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
-            <ChevronLeft className="h-8 w-8" />
+            {isNavigating && navigationDirection === 'previous' ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <ChevronLeft className="h-8 w-8" />
+            )}
           </button>
         )}
-        {onNavigateNext && !lightboxOpen && (
+        {!isSidebar && onNavigateNext && !lightboxOpen && (
           <button
             type="button"
+            disabled={isNavigating}
             onClick={(e) => {
               e.stopPropagation();
               onNavigateNext();
             }}
             aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
             title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
-            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-wait disabled:opacity-70 cursor-pointer"
           >
-            <ChevronRight className="h-8 w-8" />
+            {isNavigating && navigationDirection === 'next' ? (
+              <Loader2 className="h-6 w-6 animate-spin" />
+            ) : (
+              <ChevronRight className="h-8 w-8" />
+            )}
           </button>
         )}
-        {/* Header - single row. Status badges, category, title, and dense
-            metadata cluster all fit on one line so the modal's vertical
-            budget goes to content, not chrome. Title shrinks/truncates
+        {/* Header. Status badges, title, and dense metadata stay compact so
+            the modal's vertical budget goes to content. Title shrinks/truncates
             first when space gets tight; metadata hides on narrow screens. */}
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border flex-shrink-0">
+          {/* Sidebar-only: compact step arrows live inline since the big
+              floating ones have nowhere to go in a docked panel. */}
+          {isSidebar && (onNavigatePrevious || onNavigateNext) && !lightboxOpen && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                disabled={isNavigating || !onNavigatePrevious}
+                onClick={() => onNavigatePrevious?.()}
+                aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
+                title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-tertiary text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:cursor-default disabled:opacity-40 cursor-pointer"
+              >
+                {isNavigating && navigationDirection === 'previous' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronLeft className="h-4 w-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isNavigating || !onNavigateNext}
+                onClick={() => onNavigateNext?.()}
+                aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
+                title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-bg-tertiary text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:cursor-default disabled:opacity-40 cursor-pointer"
+              >
+                {isNavigating && navigationDirection === 'next' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 flex-shrink-0">
             {updateAvailable && (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent border border-accent/40">
@@ -602,18 +826,32 @@ export default function ModDetailsModal({
               </span>
             )}
           </div>
-          <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={mod.name}>
-            <a
-              href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`View ${mod.name} on GameBanana`}
-              className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
-            >
-              <span className="min-w-0 truncate">{mod.name}</span>
-              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-            </a>
-          </h2>
+          {/* Sidebar moves the title down into the body (above the artist) to
+              keep this header from cramming, so here it's just a spacer that
+              pushes the action buttons to the right edge. */}
+          {isSidebar ? (
+            <div className="min-w-0 flex-1" />
+          ) : (
+            <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={isNavigating ? navigationLabel : mod.name}>
+              {isNavigating ? (
+                <span className="inline-flex w-full max-w-sm items-center gap-2">
+                  <Skeleton className="h-5 w-full max-w-[20rem]" />
+                  <span className="sr-only">Loading {navigationLabel ?? 'mod details'}</span>
+                </span>
+              ) : (
+                <a
+                  href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`View ${mod.name} on GameBanana`}
+                  className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+                >
+                  <span className="min-w-0 truncate">{mod.name}</span>
+                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                </a>
+              )}
+            </h2>
+          )}
           {(() => {
             // Hide the modified date when it formats to the same day as the
             // added date - common for fresh uploads where both timestamps
@@ -623,6 +861,9 @@ export default function ModDetailsModal({
             const modifiedStr = dateModified && dateModified > 0 ? formatDate(dateModified) : null;
             const showModified = modifiedStr !== null && modifiedStr !== addedStr;
             if (!addedStr && !showModified && totalDownloads === 0) return null;
+            // The sidebar surfaces this same metadata in its body title block,
+            // so keep it out of the cramped sidebar header.
+            if (isSidebar) return null;
             return (
               <div className="hidden md:flex items-center gap-3 text-xs text-text-secondary flex-shrink-0">
                 {addedStr && (
@@ -653,6 +894,16 @@ export default function ModDetailsModal({
               </div>
             );
           })()}
+          {onChangeView && (
+            <button
+              onClick={() => onChangeView(isSidebar ? 'modal' : 'sidebar')}
+              aria-label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
+              title={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
+              className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
+            >
+              {isSidebar ? <Maximize2 className="w-[18px] h-[18px]" /> : <PanelRight className="w-5 h-5" />}
+            </button>
+          )}
           <button
             onClick={onClose}
             aria-label="Close"
@@ -720,10 +971,118 @@ export default function ModDetailsModal({
             two independently-scrollable columns on lg+. Independent scroll
             on wide is critical now that previews stack vertically: scrolling
             comments shouldn't drag the image column away, and vice versa. */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        <div className={`mod-details-body relative flex-1 min-h-0 overflow-hidden ${modalBodyTransitionClass}`}>
+          <div className={bodyContentClass}>
             {/* Image / preview column */}
-            <div className="lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pr-3 space-y-3">
+            <div className={imageColClass}>
               {images.length > 0 ? (
+                isSidebar ? (
+                  /* Sidebar carousel - one image slot the user swipes (or clicks
+                     the arrows) through, instead of the modal's tall stack. The
+                     narrow panel has no room to stack every preview, and a
+                     single slot keeps the details (files/about) above the fold. */
+                  (() => {
+                    const idx = Math.min(currentImageIndex, images.length - 1);
+                    const img = images[idx];
+                    const previewSrc = `${img.baseUrl}/${img.file530 || img.file}`;
+                    const fullSrc = `${img.baseUrl}/${img.file}`;
+                    const imageHidden = mod.nsfw && hideNsfwPreviews;
+                    const slot = (
+                      // Fixed-aspect box (not the image's own ratio): portrait and
+                      // landscape previews both letterbox into the same height, so
+                      // the centered arrows never shift as you click through.
+                      <div
+                        className="relative w-full select-none touch-pan-y aspect-[16/9] bg-bg-tertiary rounded-lg overflow-hidden border border-border"
+                        onPointerDown={(e) => { swipeStartXRef.current = e.clientX; }}
+                        onPointerUp={(e) => {
+                          const start = swipeStartXRef.current;
+                          swipeStartXRef.current = null;
+                          if (start === null || images.length < 2) return;
+                          const dx = e.clientX - start;
+                          if (Math.abs(dx) > 40) {
+                            if (dx < 0) goToNext();
+                            else goToPrevious();
+                          }
+                        }}
+                        onPointerCancel={() => { swipeStartXRef.current = null; }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openLightboxAt(idx)}
+                          aria-label={`View image ${idx + 1} of ${images.length} full size`}
+                          className="group absolute inset-0 h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                        >
+                          <img
+                            src={previewSrc}
+                            alt={`${mod.name} - Image ${idx + 1}`}
+                            draggable={false}
+                            className={`absolute inset-0 h-full w-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
+                              imageHidden ? 'blur-xl scale-110' : ''
+                            }`}
+                          />
+                          {imageHidden && (
+                            <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
+                              NSFW preview hidden
+                            </div>
+                          )}
+                          <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </span>
+                        </button>
+                        {images.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
+                              aria-label="Previous image"
+                              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                            >
+                              <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); goToNext(); }}
+                              aria-label="Next image"
+                              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
+                            >
+                              <ChevronRight className="w-5 h-5" />
+                            </button>
+                            <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
+                              {idx + 1} / {images.length}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                    return (
+                      <div className="space-y-2" aria-label="Image previews">
+                        {imageHidden ? (
+                          slot
+                        ) : (
+                          <ImageContextMenu src={previewSrc} copySrc={fullSrc} alt={`${mod.name} - Image ${idx + 1}`}>
+                            {slot}
+                          </ImageContextMenu>
+                        )}
+                        {images.length > 1 && images.length <= 10 && (
+                          <div className="flex flex-wrap items-center justify-center gap-1.5">
+                            {images.map((_, dotIndex) => (
+                              <button
+                                key={dotIndex}
+                                type="button"
+                                onClick={() => setCurrentImageIndex(dotIndex)}
+                                aria-label={`Go to image ${dotIndex + 1}`}
+                                aria-current={dotIndex === idx}
+                                className={`h-1.5 rounded-full transition-all ${
+                                  dotIndex === idx ? 'w-4 bg-accent' : 'w-1.5 bg-text-tertiary/50 hover:bg-text-tertiary'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : (
                 /* Vertical preview stack - every image renders inline so
                    users scroll naturally to see all of them. Click any one
                    to open the lightbox at that image's index. We use the
@@ -793,6 +1152,7 @@ export default function ModDetailsModal({
                     );
                   })}
                 </div>
+                )
               ) : section === 'Sound' && !audioPreviewUrl ? (
                 <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
                   <div className="flex flex-col items-center gap-2 text-text-secondary">
@@ -831,7 +1191,118 @@ export default function ModDetailsModal({
                 Takes the remaining horizontal space on wide layouts.
                 Independently scrollable on lg+ so reading comments or
                 installing a file doesn't move the image stack on the left. */}
-            <div className="flex-1 min-w-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pl-3 space-y-5">
+            <div className={detailsColClass}>
+              {/* Sidebar-only title block. The header drops the title to stay
+                  uncluttered, so the mod name lives here, right above the artist,
+                  with its dates/downloads underneath. */}
+              {isSidebar && (
+                <div className="space-y-1.5">
+                  {isNavigating ? (
+                    <Skeleton className="h-6 w-3/4" />
+                  ) : (
+                    <a
+                      href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`View ${mod.name} on GameBanana`}
+                      className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
+                    >
+                      <span className="min-w-0">{mod.name}</span>
+                      <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                    </a>
+                  )}
+                  {(() => {
+                    const addedStr = dateAdded && dateAdded > 0 ? formatDate(dateAdded) : null;
+                    const modifiedStr = dateModified && dateModified > 0 ? formatDate(dateModified) : null;
+                    const showModified = modifiedStr !== null && modifiedStr !== addedStr;
+                    if (!addedStr && !showModified && totalDownloads === 0) return null;
+                    return (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+                        {addedStr && (
+                          <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
+                            <Clock className="h-3 w-3" />
+                            {addedStr}
+                          </span>
+                        )}
+                        {showModified && (
+                          <span
+                            className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
+                            title={`Last updated ${modifiedStr}`}
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            {modifiedStr}
+                          </span>
+                        )}
+                        {totalDownloads > 0 && (
+                          <span className="flex items-center gap-1" title={`${totalDownloads.toLocaleString()} downloads`}>
+                            <Download className="h-3 w-3" />
+                            {totalDownloads.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {submitter && (
+                <section>
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-tertiary/40 p-3">
+                    {openArtist ? (
+                      <button
+                        type="button"
+                        onClick={openArtist}
+                        title={`View ${submitter.name}'s mods`}
+                        className="flex-shrink-0 rounded-full transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer"
+                      >
+                        {avatarVisual}
+                      </button>
+                    ) : (
+                      avatarVisual
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Artist</div>
+                      {openArtist ? (
+                        <button
+                          type="button"
+                          onClick={openArtist}
+                          title={`View ${submitter.name}'s mods`}
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent cursor-pointer"
+                        >
+                          <span className="min-w-0 truncate">{submitter.name}</span>
+                          <ChevronRight className="h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                        </button>
+                      ) : submitterProfileUrl ? (
+                        <a
+                          href={submitterProfileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`View ${submitter.name} on GameBanana`}
+                          className="group/artist inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-text-primary transition-colors hover:text-accent"
+                        >
+                          <span className="min-w-0 truncate">{submitter.name}</span>
+                          <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover/artist:text-accent" />
+                        </a>
+                      ) : (
+                        <span className="block min-w-0 truncate font-semibold text-text-primary">{submitter.name}</span>
+                      )}
+                    </div>
+                    {submitterKofiUrl && (
+                      <a
+                        href={submitterKofiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Support ${submitter.name} on Ko-fi`}
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+                      >
+                        <Coffee className="h-4 w-4" />
+                        Ko-fi
+                      </a>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {mod.description && (
                 <section>
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
@@ -1065,6 +1536,8 @@ export default function ModDetailsModal({
                 View on GameBanana
               </a>
             </div>
+          </div>
+          {isNavigating && navigationSkeleton}
         </div>
       </div>
 
@@ -1129,5 +1602,7 @@ export default function ModDetailsModal({
     </div>
   );
 
-  return createPortal(modal, document.body);
+  // The sidebar renders inline inside the caller's <aside>; only the centered
+  // modal needs to escape to a body-level portal.
+  return isSidebar ? modal : createPortal(modal, document.body);
 }

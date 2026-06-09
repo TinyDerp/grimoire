@@ -687,6 +687,7 @@ async function fetchCandidateModsPage(
         bucket.search,
         bucket.categoryId,
         'default',
+        undefined,
         { signal }
     );
     debugUnknownCrc(

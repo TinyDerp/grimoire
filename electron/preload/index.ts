@@ -7,6 +7,7 @@ import type {
 } from '../../src/types/portableProfile';
 import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
+import type { GameBananaArtistLink } from '../../src/types/gamebanana';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -101,6 +102,7 @@ export interface ElectronAPI {
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     getModUpdates: (args: GetModCommentsArgs) => Promise<GameBananaModUpdatesResponse>;
+    getSubmitterLinks: (memberId: number) => Promise<GameBananaArtistLink[]>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
@@ -401,11 +403,13 @@ interface BrowseModsArgs {
     section?: string;
     categoryId?: number;
     sort?: string;
+    submitterId?: number;
 }
 
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+    includeSubmitter?: boolean;
 }
 
 interface GetModCommentsArgs {
@@ -580,9 +584,11 @@ interface GameBananaModDetails {
     id: number;
     name: string;
     description?: string;
+    nsfw?: boolean;
     category?: unknown;
     files?: unknown[];
     previewMedia?: unknown;
+    submitter?: unknown;
 }
 
 interface GameBananaModFileList {
@@ -937,6 +943,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     getModUpdates: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-updates', args),
+    getSubmitterLinks: (memberId: number) => ipcRenderer.invoke('get-submitter-links', memberId),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>

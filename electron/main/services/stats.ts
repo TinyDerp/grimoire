@@ -21,6 +21,7 @@ import type {
     HeroStatsParams,
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
+import { GRIMOIRE_USER_AGENT } from './userAgent'
 
 // Local flat types for counter/synergy stats (API returns flat arrays, not nested)
 export interface FlatHeroCounterStats {
@@ -74,7 +75,7 @@ async function fetchFromAPI<T>(
 
     const headers: Record<string, string> = {
         Accept: 'application/json',
-        'User-Agent': 'DeadlockModManager/1.0',
+        'User-Agent': GRIMOIRE_USER_AGENT,
     }
 
     if (options?.apiKey) {
