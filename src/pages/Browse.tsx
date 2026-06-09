@@ -24,6 +24,8 @@ import {
   ChevronDown,
   Upload,
   Play,
+  Maximize2,
+  PanelRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -66,9 +68,34 @@ type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name
 // longer a user choice: it's what small cards become below the size threshold.
 type ViewMode = 'grid' | 'compact' | 'list';
 type BrowseCardDesign = 'classic' | 'readable';
+// Where a clicked mod's details open: the centered overlay (default) or a
+// docked right-side panel that lets the user keep browsing the grid. Persisted
+// like the other Browse view preferences (card design/size).
+type BrowseDetailsView = 'modal' | 'sidebar';
 type ModDetailsNavigationDirection = 'previous' | 'next';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
+const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
+// Below this window width the docked sidebar would crush the grid, so we force
+// the centered modal regardless of the saved preference.
+const BROWSE_SIDEBAR_MIN_WINDOW_WIDTH = 760;
+const BROWSE_SIDEBAR_WIDTH_KEY = 'browseDetailsSidebarWidth';
+const BROWSE_SIDEBAR_WIDTH_MIN = 320;
+const BROWSE_SIDEBAR_WIDTH_MAX = 720;
+const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
+// The grid always keeps at least this much room; the sidebar's effective width
+// is capped so a wide drag (or a small window) can't starve the browse area.
+const BROWSE_SIDEBAR_GRID_RESERVE = 360;
+
+function clampSidebarWidth(value: number): number {
+  return clampNumber(value, BROWSE_SIDEBAR_WIDTH_MIN, BROWSE_SIDEBAR_WIDTH_MAX);
+}
+
+function readBrowseSidebarWidth(): number {
+  if (typeof window === 'undefined') return BROWSE_SIDEBAR_WIDTH_DEFAULT;
+  const stored = Number(window.localStorage.getItem(BROWSE_SIDEBAR_WIDTH_KEY));
+  return Number.isFinite(stored) && stored > 0 ? clampSidebarWidth(stored) : BROWSE_SIDEBAR_WIDTH_DEFAULT;
+}
 // Persist filter UI inputs across page navigation. The store keeps these in
 // memory so visiting Installed and coming back doesn't blow away the user's
 // current search/filter context. Kept out of localStorage so a fresh launch
@@ -991,6 +1018,51 @@ export default function Browse() {
   const setBrowseCardDesign = useCallback((design: BrowseCardDesign) => {
     setBrowseCardDesignState(design);
     window.localStorage.setItem(BROWSE_CARD_DESIGN_STORAGE_KEY, design);
+  }, []);
+  const [browseDetailsView, setBrowseDetailsViewState] = useState<BrowseDetailsView>(() => {
+    if (typeof window === 'undefined') return 'modal';
+    return window.localStorage.getItem(BROWSE_DETAILS_VIEW_STORAGE_KEY) === 'sidebar' ? 'sidebar' : 'modal';
+  });
+  const setBrowseDetailsView = useCallback((view: BrowseDetailsView) => {
+    setBrowseDetailsViewState(view);
+    window.localStorage.setItem(BROWSE_DETAILS_VIEW_STORAGE_KEY, view);
+  }, []);
+  // The sidebar only wins when there's room for it; on a narrow window it would
+  // squeeze the grid into uselessness, so we fall back to the centered modal.
+  const detailsSidebarActive =
+    browseDetailsView === 'sidebar' &&
+    browseViewportMetrics.windowWidth >= BROWSE_SIDEBAR_MIN_WINDOW_WIDTH;
+  // User-resizable sidebar width, persisted. The effective width is also capped
+  // so the grid keeps BROWSE_SIDEBAR_GRID_RESERVE px no matter how the user drags
+  // or how small the window is.
+  const [browseSidebarWidth, setBrowseSidebarWidthState] = useState<number>(readBrowseSidebarWidth);
+  const sidebarWidthCeiling = browseViewportMetrics.windowWidth
+    ? Math.max(BROWSE_SIDEBAR_WIDTH_MIN, browseViewportMetrics.windowWidth - BROWSE_SIDEBAR_GRID_RESERVE)
+    : BROWSE_SIDEBAR_WIDTH_MAX;
+  const effectiveSidebarWidth = Math.min(clampSidebarWidth(browseSidebarWidth), sidebarWidthCeiling);
+  const startSidebarResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent) => {
+      const ceiling = Math.max(BROWSE_SIDEBAR_WIDTH_MIN, window.innerWidth - BROWSE_SIDEBAR_GRID_RESERVE);
+      const next = Math.min(clampSidebarWidth(window.innerWidth - ev.clientX), ceiling);
+      setBrowseSidebarWidthState(next);
+    };
+    const onUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      // Persist the raw width (not the window-capped value) so widening the
+      // window later restores the size the user actually picked.
+      setBrowseSidebarWidthState((w) => {
+        window.localStorage.setItem(BROWSE_SIDEBAR_WIDTH_KEY, String(w));
+        return w;
+      });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   }, []);
 
   // Load settings on mount (needed for hideNsfwPreviews)
@@ -2338,8 +2410,45 @@ export default function Browse() {
     );
   }
 
+  // One details element, two homes: the centered modal portals to <body>, the
+  // sidebar renders inline inside the <aside> below. Same props either way, so
+  // build it once and let `variant` decide the presentation.
+  const renderModDetails = (variant: BrowseDetailsView) =>
+    selectedMod ? (
+      <ModDetailsModal
+        variant={variant}
+        onChangeView={setBrowseDetailsView}
+        mod={selectedMod}
+        section={section}
+        installed={installedIds.has(selectedMod.id)}
+        installedFileIds={installedFileIds}
+        installedFileStates={installedFileStates}
+        onEnableFile={(modId) => toggleMod(modId)}
+        downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
+        queuedFileIds={selectedQueuedFileIds}
+        extracting={extracting}
+        progress={downloadProgress}
+        hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+        dateAdded={selectedModDates?.dateAdded}
+        dateModified={selectedModDates?.dateModified}
+        isNavigating={!!modalNavigation}
+        navigationDirection={modalNavigation?.direction}
+        navigationLabel={modalNavigation?.label}
+        onClose={closeSelectedMod}
+        onDownload={handleDownload}
+        onNavigatePrevious={
+          previousSelectedMod ? () => void handleNavigateMod(previousSelectedMod, 'previous') : undefined
+        }
+        onNavigateNext={nextSelectedMod ? () => void handleNavigateMod(nextSelectedMod, 'next') : undefined}
+        previousLabel={previousSelectedMod?.name}
+        nextLabel={nextSelectedMod?.name}
+        onDeleteFile={deleteMod}
+      />
+    ) : null;
+
   return (
-    <div className={`h-full overflow-y-auto ${isBrowseScrolling ? 'browse-is-scrolling' : ''}`} ref={scrollContainerRef}>
+    <div className="flex h-full min-h-0">
+      <div className={`flex-1 min-w-0 h-full overflow-y-auto ${isBrowseScrolling ? 'browse-is-scrolling' : ''}`} ref={scrollContainerRef}>
       {/* Header with Search */}
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         <form onSubmit={handleSearch}>
@@ -2548,6 +2657,32 @@ export default function Browse() {
                               }`}
                             >
                               {design === 'readable' ? 'Default' : 'Classic'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">Details view</div>
+                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Mod details view">
+                        {(['modal', 'sidebar'] as const).map((view) => {
+                          const active = browseDetailsView === view;
+                          return (
+                            <button
+                              key={view}
+                              type="button"
+                              role="tab"
+                              aria-selected={active}
+                              onClick={() => setBrowseDetailsView(view)}
+                              className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors ${
+                                active
+                                  ? 'border-accent/50 bg-accent/10 text-accent'
+                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                              }`}
+                            >
+                              {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
+                              {view === 'modal' ? 'Window' : 'Sidebar'}
                             </button>
                           );
                         })}
@@ -2973,36 +3108,9 @@ export default function Browse() {
         </div>
       </div>
 
-      {/* Mod Details Modal */}
-      {selectedMod && (
-        <ModDetailsModal
-          mod={selectedMod}
-          section={section}
-          installed={installedIds.has(selectedMod.id)}
-          installedFileIds={installedFileIds}
-          installedFileStates={installedFileStates}
-          onEnableFile={(modId) => toggleMod(modId)}
-          downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
-          queuedFileIds={selectedQueuedFileIds}
-          extracting={extracting}
-          progress={downloadProgress}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
-          dateAdded={selectedModDates?.dateAdded}
-          dateModified={selectedModDates?.dateModified}
-          isNavigating={!!modalNavigation}
-          navigationDirection={modalNavigation?.direction}
-          navigationLabel={modalNavigation?.label}
-          onClose={closeSelectedMod}
-          onDownload={handleDownload}
-          onNavigatePrevious={
-            previousSelectedMod ? () => void handleNavigateMod(previousSelectedMod, 'previous') : undefined
-          }
-          onNavigateNext={nextSelectedMod ? () => void handleNavigateMod(nextSelectedMod, 'next') : undefined}
-          previousLabel={previousSelectedMod?.name}
-          nextLabel={nextSelectedMod?.name}
-          onDeleteFile={deleteMod}
-        />
-      )}
+      {/* Mod details: centered modal (portals to body). The sidebar variant is
+          mounted in the <aside> outside this scroll container instead. */}
+      {!detailsSidebarActive && renderModDetails('modal')}
 
       {collectionModalOpen && (
         <ImportCollectionModal
@@ -3021,6 +3129,29 @@ export default function Browse() {
           onClose={() => setImportProfileOpen(false)}
           onImported={() => { void loadMods(); }}
         />
+      )}
+      </div>
+
+      {/* Docked details sidebar. Shrinking the flex-1 grid above triggers the
+          scroll container's ResizeObserver, which recomputes the virtualized
+          column count, so the grid reflows to fewer columns on its own. */}
+      {selectedMod && detailsSidebarActive && (
+        <aside
+          className="relative flex-shrink-0 h-full border-l border-border bg-bg-secondary overflow-hidden animate-fade-in"
+          style={{ width: effectiveSidebarWidth }}
+        >
+          {/* Drag the left edge to resize; the width is remembered. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize details sidebar"
+            onPointerDown={startSidebarResize}
+            className="group absolute inset-y-0 left-0 z-30 w-2 -ml-1 cursor-col-resize"
+          >
+            <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
+          </div>
+          {renderModDetails('sidebar')}
+        </aside>
       )}
     </div>
   );
@@ -3372,6 +3503,13 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
   // see the size-threshold derivation of viewMode in the Browse component.
   const isCompact = viewMode === 'compact';
+  // At the smallest grid sizes the bottom overlay (title + stats + author) eats
+  // most of a classic card, burying the art it's drawn over. Below this width
+  // we collapse to just the title at rest and reveal the rest on hover/focus.
+  // Keyed off the real card width (not viewMode, which never resolves to
+  // 'compact' for classic cards) so it tracks the card-size slider.
+  const minimalChrome =
+    cardDesign === 'classic' && typeof cardWidth === 'number' && cardWidth > 0 && cardWidth < 205;
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
@@ -3635,7 +3773,9 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       </div>
 
       {/* Gradient: for sound cards with audio preview, darken TOP (title) and BOTTOM (player).
-          For other cards, the classic bottom-darkest gradient. */}
+          For other cards, the classic bottom-darkest gradient. On minimal-chrome
+          cards the rest state uses a short fade (just enough for the title line)
+          so the art stays visible; the fuller scrim fades back in on hover below. */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={
@@ -3644,12 +3784,28 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 background:
                   'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.9) 100%)',
               }
-            : {
-                background:
-                  'linear-gradient(to top, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.86) 30%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.12) 78%, transparent 100%)',
-              }
+            : minimalChrome
+              ? {
+                  background:
+                    'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.55) 22%, rgba(0,0,0,0.08) 45%, transparent 64%)',
+                }
+              : {
+                  background:
+                    'linear-gradient(to top, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.86) 30%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.12) 78%, transparent 100%)',
+                }
         }
       />
+      {/* Hover-only fuller scrim for minimal cards, so the revealed stats/author
+          stay legible once they slide up. */}
+      {minimalChrome && (
+        <div
+          className="absolute inset-0 pointer-events-none opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+          style={{
+            background:
+              'linear-gradient(to top, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.82) 28%, rgba(0,0,0,0.4) 55%, transparent 80%)',
+          }}
+        />
+      )}
 
       {/* Info: moved to TOP for audio-preview sound cards so it stops covering the player.
           State tags (NSFW/Installed/Outdated) live inside this block too, on a row
@@ -3686,22 +3842,32 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         </div>
       ) : (
-        <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
-          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
-            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
-            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+        <div className={`absolute bottom-0 left-0 right-0 ${minimalChrome ? 'p-2' : isCompact ? 'p-2.5' : 'p-3'}`}>
+          <h3 className={`font-mod-title font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${minimalChrome || isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          {/* Stats / author / outdated. On minimal cards this group is collapsed
+              to zero height at rest and slides up on hover or keyboard focus. */}
+          <div
+            className={
+              minimalChrome
+                ? 'overflow-hidden transition-all duration-200 ease-out max-h-0 opacity-0 group-hover:max-h-20 group-hover:opacity-100 group-focus-within:max-h-20 group-focus-within:opacity-100'
+                : ''
+            }
+          >
+            <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+              <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+              <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
+              {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+            </div>
+            {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
+              <IconText
+                icon={AlertTriangle}
+                className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
+                iconClassName="browse-meta-icon"
+              >
+                <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+              </IconText>
+            )}
           </div>
-          {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-            <IconText
-              icon={AlertTriangle}
-              className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
-              iconClassName="browse-meta-icon"
-            >
-              <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
-            </IconText>
-          )}
         </div>
       )}
 
