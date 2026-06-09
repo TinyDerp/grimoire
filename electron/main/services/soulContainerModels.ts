@@ -26,6 +26,7 @@ import { runVpkmerge } from './modMerger';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
 export const SOUL_MODEL_SCHEME = 'grimoire-soul';
+const SOUL_CACHE_VERSION = '2';
 
 /**
  * Canonical soul-container model entry. Present in the base pak01 and in the
@@ -50,6 +51,10 @@ function modelDir(key: string): string {
 
 function modelFile(key: string): string {
     return join(modelDir(key), 'model.glb');
+}
+
+function versionFile(key: string): string {
+    return join(modelDir(key), '.cache-version');
 }
 
 /**
@@ -139,6 +144,10 @@ export interface SoulModelInfo {
 export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
     try {
         const stat = await fs.stat(modelFile(key));
+        const version = await fs.readFile(versionFile(key), 'utf8').catch(() => '');
+        if (version.trim() !== SOUL_CACHE_VERSION) {
+            return { hasModel: false, mtimeMs: null };
+        }
         return { hasModel: true, mtimeMs: stat.mtimeMs };
     } catch {
         return { hasModel: false, mtimeMs: null };
@@ -177,11 +186,12 @@ export async function exportSoulModel(
         out,
     ]);
 
-    // Drop the degenerate skin morphic emits on these static props so three.js
-    // loads them as plain meshes (see stripGlbSkins).
+    // Current vpkmerge avoids degenerate static skins, but keep this as a
+    // compatibility no-op/fallback for older local binaries or stale outputs.
     const raw = await fs.readFile(out);
     const patched = stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);
+    await fs.writeFile(versionFile(metaKey), SOUL_CACHE_VERSION);
 
     return getSoulModelInfo(metaKey);
 }

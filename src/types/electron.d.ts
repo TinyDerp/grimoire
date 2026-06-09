@@ -36,7 +36,7 @@ import type {
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from './gamebanana';
-import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from './portrait';
+import type { HeroPortrait, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
 
 export interface BrowseModsArgs {
     page: number;
@@ -338,8 +338,15 @@ export interface ElectronAPI {
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
     exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
     clearSoulModel: (key: string) => Promise<void>;
-    getHeroPoseInfo: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
-    exportHeroPose: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
+    getHeroPoseInfo: (
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[]
+    ) => Promise<HeroPoseInfo>;
+    exportHeroPose: (
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[],
+        fallbackSkinMetaKey?: string
+    ) => Promise<HeroPoseInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     applyHeroSound: (
