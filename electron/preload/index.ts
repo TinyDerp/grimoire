@@ -432,6 +432,7 @@ interface DownloadModArgs {
     modId: number;
     fileId: number;
     fileName: string;
+    modName?: string;
     section?: string;
     categoryId?: number;
 }
@@ -537,6 +538,7 @@ interface DownloadQueueItem {
     modId: number;
     fileId: number;
     fileName: string;
+    modName?: string;
 }
 
 interface DownloadQueueData {

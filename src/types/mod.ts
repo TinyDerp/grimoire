@@ -588,6 +588,7 @@ export interface AppSettings {
   devDeadlockPath: string | null;
   hideNsfwPreviews: boolean;
   hideOutdatedMods: boolean;
+  lockerCardsExpandedByDefault: boolean;
   autoDisableSiblingVariants: boolean;
   steamLaunchOptions: string;
   activeProfileId: string | null;

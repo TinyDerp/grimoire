@@ -44,10 +44,6 @@ import type {
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
-  BROWSE_CARD_SIZE_MIN,
-  BROWSE_CARD_SIZE_MAX,
-  BROWSE_CARD_SIZE_DEFAULT,
-  BROWSE_COMPACT_CARD_THRESHOLD,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
@@ -156,34 +152,70 @@ const BROWSE_READABLE_HERO_CHIP_WIDTH = 24;
 // Below this card width the "last updated" line moves to its own row under the
 // author instead of sharing the stats row, so it never squashes likes/views.
 const BROWSE_READABLE_UPDATED_INLINE_MIN = 300;
-const BROWSE_READABLE_CARD_MIN = 140;
 const BROWSE_READABLE_CARD_GOLDEN = 280;
-const BROWSE_READABLE_CARD_MAX = 340;
-const BROWSE_CARD_SIZE_STEP = 20;
 const BROWSE_GRID_OVERSCAN_ROWS = 4;
+const BROWSE_CARD_SIZE_MIN = 220;
+const BROWSE_CARD_SIZE_BASE = 118;
+const BROWSE_CARD_SIZE_VW = 0.07;
+const BROWSE_CARD_SIZE_VH = 0.03;
+const BROWSE_CARD_SIZE_MAX = 300;
+const BROWSE_CARD_SIZE_MULTIPLIER_MIN = 0.8;
+const BROWSE_CARD_SIZE_MULTIPLIER_MAX = 2;
+const BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT = 1;
+const BROWSE_CARD_SIZE_MULTIPLIER_STEP = 0.1;
+const BROWSE_CARD_SIZE_MULTIPLIER_KEY = 'browseCardSizeMultiplier';
 
 type BrowseReadableDensity = 'micro' | 'compact' | 'full';
+type BrowseViewportMetrics = {
+  containerWidth: number;
+  windowWidth: number;
+  windowHeight: number;
+};
+
+const DEFAULT_BROWSE_VIEWPORT_METRICS: BrowseViewportMetrics = {
+  containerWidth: 0,
+  windowWidth: 0,
+  windowHeight: 0,
+};
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function clampBrowseCardSizeMultiplier(value: number): number {
+  return clampNumber(value, BROWSE_CARD_SIZE_MULTIPLIER_MIN, BROWSE_CARD_SIZE_MULTIPLIER_MAX);
+}
+
+function readBrowseCardSizeMultiplier(): number {
+  const stored = Number(localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY));
+  return Number.isFinite(stored) ? clampBrowseCardSizeMultiplier(stored) : BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
+}
+
+function getBrowseCardSizeCss(multiplier: number): string {
+  const nextMultiplier = clampBrowseCardSizeMultiplier(multiplier);
+  return `clamp(${BROWSE_CARD_SIZE_MIN * nextMultiplier}px, calc(${BROWSE_CARD_SIZE_BASE * nextMultiplier}px + ${BROWSE_CARD_SIZE_VW * 100 * nextMultiplier}vw + ${BROWSE_CARD_SIZE_VH * 100 * nextMultiplier}vh), ${BROWSE_CARD_SIZE_MAX * nextMultiplier}px)`;
+}
+
+function getBrowseCardSizeGridStyle(multiplier: number): React.CSSProperties {
+  return {
+    '--card-size': getBrowseCardSizeCss(multiplier),
+    gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size), 1fr))',
+  } as React.CSSProperties;
+}
+
+function getResponsiveBrowseCardSize(metrics: BrowseViewportMetrics, multiplier: number): number {
+  const nextMultiplier = clampBrowseCardSizeMultiplier(multiplier);
+  const windowWidth = metrics.windowWidth || BROWSE_CARD_SIZE_MAX;
+  const windowHeight = metrics.windowHeight || BROWSE_CARD_SIZE_MAX;
+  return clampNumber(
+    (BROWSE_CARD_SIZE_BASE + windowWidth * BROWSE_CARD_SIZE_VW + windowHeight * BROWSE_CARD_SIZE_VH) * nextMultiplier,
+    BROWSE_CARD_SIZE_MIN * nextMultiplier,
+    BROWSE_CARD_SIZE_MAX * nextMultiplier
+  );
+}
 
 function getReadableCardTargetWidth(cardSize: number): number {
-  const clampedSize = Math.min(BROWSE_CARD_SIZE_MAX, Math.max(BROWSE_CARD_SIZE_MIN, cardSize));
-
-  if (clampedSize <= BROWSE_CARD_SIZE_DEFAULT) {
-    const progress =
-      (clampedSize - BROWSE_CARD_SIZE_MIN) /
-      Math.max(1, BROWSE_CARD_SIZE_DEFAULT - BROWSE_CARD_SIZE_MIN);
-    return Math.round(
-      BROWSE_READABLE_CARD_MIN +
-        (BROWSE_READABLE_CARD_GOLDEN - BROWSE_READABLE_CARD_MIN) * progress
-    );
-  }
-
-  const progress =
-    (clampedSize - BROWSE_CARD_SIZE_DEFAULT) /
-    Math.max(1, BROWSE_CARD_SIZE_MAX - BROWSE_CARD_SIZE_DEFAULT);
-  return Math.round(
-    BROWSE_READABLE_CARD_GOLDEN +
-      (BROWSE_READABLE_CARD_MAX - BROWSE_READABLE_CARD_GOLDEN) * progress
-  );
+  return Math.max(1, Math.round(cardSize));
 }
 
 function getReadableCardGridGap(targetWidth: number): number {
@@ -835,17 +867,19 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, cardSize, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
-  const [previewCardSize, setPreviewCardSize] = useState(cardSize);
-  const activeCardSize = layout === 'list' ? cardSize : previewCardSize;
+  const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  const [browseViewportMetrics, setBrowseViewportMetrics] = useState<BrowseViewportMetrics>(DEFAULT_BROWSE_VIEWPORT_METRICS);
+  const [browseCardSizeMultiplier, setBrowseCardSizeMultiplierState] = useState(readBrowseCardSizeMultiplier);
+  const browseCardSize = getResponsiveBrowseCardSize(browseViewportMetrics, browseCardSizeMultiplier);
+  const browseCardSizeGridStyle = useMemo(
+    () => getBrowseCardSizeGridStyle(browseCardSizeMultiplier),
+    [browseCardSizeMultiplier]
+  );
   // Effective render mode: List is structural; otherwise small cards get the
   // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
-  const viewMode: ViewMode =
-    layout === 'list' ? 'list' : activeCardSize < BROWSE_COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
-  const [browseViewportWidth, setBrowseViewportWidth] = useState(0);
+  const viewMode: ViewMode = layout === 'list' ? 'list' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
-  const setCardSize = useCallback((v: number) => setBrowseUi({ cardSize: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
@@ -854,15 +888,11 @@ export default function Browse() {
   const setAddedTo = useCallback((v: string) => setBrowseUi({ addedTo: v }), [setBrowseUi]);
   const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
-  const commitCardSize = useCallback((nextSize: number) => {
-    setPreviewCardSize(nextSize);
-    setCardSize(nextSize);
-  }, [setCardSize]);
-
-  useEffect(() => {
-    setPreviewCardSize(cardSize);
-  }, [cardSize]);
-
+  const setBrowseCardSizeMultiplier = useCallback((nextMultiplier: number) => {
+    const clampedMultiplier = clampBrowseCardSizeMultiplier(nextMultiplier);
+    setBrowseCardSizeMultiplierState(clampedMultiplier);
+    localStorage.setItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY, String(clampedMultiplier));
+  }, []);
   // Hydrate from session cache on mount so navigating away + back doesn't
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
@@ -1166,17 +1196,34 @@ export default function Browse() {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const updateWidth = () => setBrowseViewportWidth(container.clientWidth);
-    updateWidth();
+    const updateMetrics = () => {
+      const nextMetrics = {
+        containerWidth: container.clientWidth,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+      };
+      setBrowseViewportMetrics((currentMetrics) =>
+        currentMetrics.containerWidth === nextMetrics.containerWidth &&
+        currentMetrics.windowWidth === nextMetrics.windowWidth &&
+        currentMetrics.windowHeight === nextMetrics.windowHeight
+          ? currentMetrics
+          : nextMetrics
+      );
+    };
+    updateMetrics();
 
     if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateWidth);
-      return () => window.removeEventListener('resize', updateWidth);
+      window.addEventListener('resize', updateMetrics);
+      return () => window.removeEventListener('resize', updateMetrics);
     }
 
-    const observer = new ResizeObserver(updateWidth);
+    const observer = new ResizeObserver(updateMetrics);
     observer.observe(container);
-    return () => observer.disconnect();
+    window.addEventListener('resize', updateMetrics);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateMetrics);
+    };
   }, []);
 
   // Mirror scrollTop into a ref on every scroll. The unmount cleanup below
@@ -2201,22 +2248,20 @@ export default function Browse() {
       ? displayMods[selectedModIndex + 1]
       : undefined;
 
-  const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
+  const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =
     layout === 'list'
       ? 12
       : browseCardDesign === 'readable'
         ? getReadableCardGridGap(readableCardTargetWidth)
-        : viewMode === 'compact'
-          ? 8
-          : 12;
+        : 12;
   const columnMinWidth =
     layout === 'list'
-      ? Math.max(1, browseViewportWidth - 32)
+      ? Math.max(1, browseViewportMetrics.containerWidth - 32)
       : browseCardDesign === 'readable'
         ? readableCardTargetWidth
-        : activeCardSize;
-  const contentWidth = Math.max(columnMinWidth, browseViewportWidth - 32);
+        : browseCardSize;
+  const contentWidth = Math.max(columnMinWidth, browseViewportMetrics.containerWidth - 32);
   const virtualColumnCount =
     layout === 'list'
       ? 1
@@ -2432,18 +2477,15 @@ export default function Browse() {
                       <div className="flex items-center gap-2">
                         <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                         <input
-                          key={cardSize}
                           type="range"
-                          min={BROWSE_CARD_SIZE_MIN}
-                          max={BROWSE_CARD_SIZE_MAX}
-                          step={BROWSE_CARD_SIZE_STEP}
-                          defaultValue={cardSize}
+                          min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
+                          max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
+                          step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
+                          value={browseCardSizeMultiplier}
                           disabled={layout === 'list'}
-                          onChange={(e) => setPreviewCardSize(Number(e.currentTarget.value))}
-                          onPointerUp={(e) => commitCardSize(Number(e.currentTarget.value))}
-                          onKeyUp={(e) => commitCardSize(Number(e.currentTarget.value))}
-                          onBlur={(e) => commitCardSize(Number(e.currentTarget.value))}
+                          onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
                           aria-label="Card size"
+                          aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
                           className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                         />
                         <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
@@ -2580,7 +2622,7 @@ export default function Browse() {
 
                       <div className="space-y-3">
                         {heroOptions.length > 0 && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
                             <HeroSelect
                               ariaLabel="Filter by hero"
@@ -2602,13 +2644,14 @@ export default function Browse() {
                                 })),
                               ]}
                             />
-                          </label>
+                          </div>
                         )}
 
                         {categoryOptions.length > 0 && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Category</span>
                             <select
+                              aria-label="Filter by category"
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
@@ -2622,15 +2665,16 @@ export default function Browse() {
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">Hero filter overrides categories.</span>
                             )}
-                          </label>
+                          </div>
                         )}
 
                         {/* Content rating + recency are served by the local catalog
                             mirror, so they only show once it's available. */}
                         {hasLocalCache && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Content</span>
                             <select
+                              aria-label="Filter by content rating"
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
@@ -2639,7 +2683,7 @@ export default function Browse() {
                               <option value="sfw">SFW only</option>
                               <option value="nsfw">NSFW only</option>
                             </select>
-                          </label>
+                          </div>
                         )}
 
                         {hasLocalCache && (
@@ -2718,16 +2762,11 @@ export default function Browse() {
       {/* Main Content */}
       <div className="relative z-0 flex-1 p-4">
         {(() => {
-          // Column min-width is the slider value, so the grid template can't be
-          // a static Tailwind class (the JIT scanner never sees it). Drive it
-          // with an inline style; gap still tracks the compact threshold.
           const gridClass =
             layout === 'list'
               ? 'flex flex-col gap-3'
               : browseCardDesign === 'readable'
                 ? 'grid'
-                : viewMode === 'compact'
-                ? 'grid gap-2'
                 : 'grid gap-3';
           const gridStyle =
             layout === 'list'
@@ -2737,7 +2776,7 @@ export default function Browse() {
                     gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
                     gap: `${gridGap}px`,
                   }
-                : { gridTemplateColumns: `repeat(auto-fill, minmax(${activeCardSize}px, 1fr))` };
+                : browseCardSizeGridStyle;
           const hasActiveFilters =
             search.trim().length > 0 ||
             heroCategoryId !== 'all' ||
@@ -2843,7 +2882,7 @@ export default function Browse() {
                             queuePosition={queuedState?.position}
                             viewMode={viewMode}
                             cardDesign={browseCardDesign}
-                            cardSize={activeCardSize}
+                            cardSize={browseCardSize}
                             cardWidth={virtualColumnWidth}
                             cardHeight={virtualCardHeight}
                             section={section}

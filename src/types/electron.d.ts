@@ -56,6 +56,7 @@ export interface DownloadModArgs {
     modId: number;
     fileId: number;
     fileName: string;
+    modName?: string;
     section?: string;
     categoryId?: number;
 }
@@ -168,6 +169,7 @@ export interface DownloadQueueItem {
     modId: number;
     fileId: number;
     fileName: string;
+    modName?: string;
 }
 
 export interface DownloadQueueData {

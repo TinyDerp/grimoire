@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
 import { useAppStore } from '../../stores/appStore';
@@ -67,6 +67,11 @@ interface HeroSkinsPanelProps {
   showDownloadable?: boolean;
   /** Message rendered when the mod list for this section is empty. */
   emptyMessage?: string;
+  /** Optional inline shortcut to Browse for this hero. Main Locker list view only. */
+  browseAction?: {
+    label: string;
+    onClick: () => void;
+  };
   minaPresets?: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures?: Mod[];
@@ -93,6 +98,7 @@ export default function HeroSkinsPanel({
   heroName,
   showDownloadable = true,
   emptyMessage = 'Download a skin for this hero to manage it here.',
+  browseAction,
   minaPresets = [],
   activeMinaPreset,
   minaTextures = [],
@@ -126,6 +132,16 @@ export default function HeroSkinsPanel({
     Boolean(minaSelection) &&
     Boolean(onMinaSelectionChange) &&
     Boolean(onApplyMinaVariant);
+  const browseLink = browseAction ? (
+    <button
+      type="button"
+      onClick={browseAction.onClick}
+      className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition-colors hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+    >
+      {browseAction.label}
+      <ExternalLink className="h-3 w-3" />
+    </button>
+  ) : null;
 
   return (
     <div className="space-y-2">
@@ -389,7 +405,8 @@ export default function HeroSkinsPanel({
       )}
 
       {hasMods ? (
-        groups.map((group) => {
+        <>
+          {groups.map((group) => {
           const isMulti = group.variants.length > 1;
           const groupActive = group.variants.some((v) => v.enabled);
           const enabledCount = group.variants.filter((v) => v.enabled).length;
@@ -517,9 +534,18 @@ export default function HeroSkinsPanel({
               )}
             </div>
           );
-        })
+          })}
+          {browseLink && (
+            <div className="flex justify-center px-1 pt-0.5">
+              {browseLink}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="text-xs text-text-secondary">{emptyMessage}</div>
+        <div className="text-xs text-text-secondary">
+          <span>{emptyMessage}</span>
+          {browseLink && <span className="ml-1">{browseLink}</span>}
+        </div>
       )}
 
       {showDownloadable && categoryId && <DownloadableSkinsSection categoryId={categoryId} />}

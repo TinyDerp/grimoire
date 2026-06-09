@@ -299,6 +299,12 @@ export default function Settings() {
     }
   };
 
+  const handleLockerCardsExpandedByDefaultChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, lockerCardsExpandedByDefault: checked });
+    }
+  };
+
   const handleAutoDisableSiblingsChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, autoDisableSiblingVariants: checked });
@@ -1070,6 +1076,15 @@ export default function Settings() {
               onChange={handleHideOutdatedChange}
               label="Hide Outdated Mods"
               description="Hide mods in Browse that haven't been updated since the current game version cutoff."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.lockerCardsExpandedByDefault ?? false}
+              onChange={handleLockerCardsExpandedByDefaultChange}
+              label="Expand Locker cards by default"
+              description="Open hero cards expanded when you enter Locker list view. You can still collapse or expand them manually."
             />
 
             <div className="h-px bg-white/5" />

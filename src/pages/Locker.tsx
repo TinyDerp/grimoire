@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -110,7 +110,7 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
 }
 
 export default function Locker() {
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, setLockerHeroName } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, setBrowseUi, setLockerHeroName } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -124,9 +124,10 @@ export default function Locker() {
   });
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
   const [showAbilityRecolorOnly, setShowAbilityRecolorOnly] = useState(false);
-  // List-view accordion state. Empty set = every hero collapsed (the default),
-  // so the list reads as a compact set of rows until the user opens one.
+  // List-view accordion state. The Settings preference decides the initial
+  // state; after that, manual expand/collapse stays under the user's control.
   const [expandedHeroes, setExpandedHeroes] = useState<Set<number>>(() => new Set());
+  const appliedExpansionDefaultRef = useRef<boolean | null>(null);
   const toggleHeroExpanded = useCallback((heroId: number) => {
     setExpandedHeroes((prev) => {
       const next = new Set(prev);
@@ -231,6 +232,18 @@ export default function Locker() {
   const goToHero = useCallback(
     (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`),
     [navigate]
+  );
+  const openHeroInBrowse = useCallback(
+    (hero: HeroCategory) => {
+      setBrowseUi({
+        section: 'Mod',
+        heroCategoryId: hero.id,
+        categoryId: 'all',
+        search: '',
+      });
+      navigate('/browse');
+    },
+    [navigate, setBrowseUi]
   );
   const selectedHeroRouteParam = useMemo(() => {
     const match = location.pathname.match(/^\/locker\/hero\/([^/]+)\/?$/);
@@ -362,6 +375,20 @@ export default function Locker() {
         : heroList,
     [abilityRecolorSupport, heroList, showAbilityRecolorOnly]
   );
+  const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
+
+  useEffect(() => {
+    if (heroList.length === 0) return;
+    if (appliedExpansionDefaultRef.current === lockerCardsExpandedByDefault) return;
+
+    setExpandedHeroes(
+      lockerCardsExpandedByDefault
+        ? new Set(heroList.map((hero) => hero.id))
+        : new Set()
+    );
+    appliedExpansionDefaultRef.current = lockerCardsExpandedByDefault;
+  }, [heroList, lockerCardsExpandedByDefault]);
+
   const allExpanded =
     visibleHeroList.length > 0 && visibleHeroList.every((hero) => expandedHeroes.has(hero.id));
   const toggleExpandAll = useCallback(() => {
@@ -673,6 +700,7 @@ export default function Locker() {
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
+              onBrowse={() => openHeroInBrowse(hero)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
                   prev.includes(hero.id)
@@ -684,7 +712,7 @@ export default function Locker() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {globalCount > 0 && !showAbilityRecolorOnly && (
             <button
               type="button"
@@ -725,6 +753,7 @@ export default function Locker() {
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
               expanded={expandedHeroes.has(hero.id)}
               onToggleExpanded={() => toggleHeroExpanded(hero.id)}
+              onBrowseSkins={() => openHeroInBrowse(hero)}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -906,6 +935,7 @@ interface HeroCardProps {
   hasAbilityRecolor: boolean;
   expanded: boolean;
   onToggleExpanded: () => void;
+  onBrowseSkins: () => void;
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   isFavorite: boolean;
@@ -934,6 +964,7 @@ interface HeroGalleryCardProps {
   hasAbilityRecolor: boolean;
   isFavorite: boolean;
   onNavigate: () => void;
+  onBrowse: () => void;
   onToggleFavorite: () => void;
 }
 
@@ -1401,6 +1432,7 @@ function HeroGalleryCard({
   hasAbilityRecolor,
   isFavorite,
   onNavigate,
+  onBrowse,
   onToggleFavorite,
 }: HeroGalleryCardProps) {
   const renderLocal = getHeroRenderPath(hero.name);
@@ -1495,6 +1527,19 @@ function HeroGalleryCard({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          onBrowse();
+        }}
+        aria-label={`Browse ${hero.name} skins`}
+        title={`Browse ${hero.name} skins`}
+        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-white/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <ExternalLink className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
           onToggleFavorite();
         }}
         aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
@@ -1569,6 +1614,7 @@ function HeroCard({
   hasAbilityRecolor,
   expanded,
   onToggleExpanded,
+  onBrowseSkins,
   onSelect,
   onToggleVariant,
   isFavorite,
@@ -1747,6 +1793,11 @@ function HeroCard({
           onToggleVariant={onToggleVariant}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}
+          browseAction={
+            activeSection === 'skins'
+              ? { label: 'Browse', onClick: onBrowseSkins }
+              : undefined
+          }
           useHeroPortraitThumbnails={activeSection === 'sounds'}
           heroName={hero.name}
           emptyMessage={

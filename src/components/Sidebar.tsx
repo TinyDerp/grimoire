@@ -90,7 +90,7 @@ function newestCreatedAt(profiles: Array<{ created_at: number }>): number {
 }
 
 function formatBadgeCount(count: number): string {
-  return count > 99 ? '99+' : String(count);
+  return count > 999 ? '999+' : String(count);
 }
 
 function GrimoireTitleIcon() {
@@ -785,7 +785,7 @@ export default function Sidebar() {
                               labelsVisible ? 'opacity-100' : 'opacity-0'
                             } relative z-10 ${
                               badgeTone === 'warning'
-                                ? 'bg-state-warning/90 text-black'
+                                ? 'border border-state-warning/60 bg-state-warning/10 text-state-warning'
                                 : badgeTone === 'info'
                                   ? 'border border-accent/60 bg-accent/15 text-accent'
                                   : 'border border-text-primary/50 text-text-primary/80'
