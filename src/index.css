@@ -48,6 +48,13 @@
   font-display: swap;
 }
 
+/* Reaver ships a single 600 face. Without this, any font-weight above 600
+   (e.g. Tailwind's font-bold) makes the browser synthesize a faux bold by
+   dilating the 600 glyphs, which reads as blurry text. */
+.font-mod-title {
+  font-synthesis: none;
+}
+
 @font-face {
   font-family: 'ValvePulp';
   src: url('/fonts/valvepulp-bold.ttf') format('truetype');
@@ -658,6 +665,24 @@ body {
   }
 }
 
+/* Docked details sidebar entrance. The aside reserves its width in one snap
+   (so the grid reflows exactly once, not per animation frame); the panel then
+   slides into the reserved gap. Transform-only, so the slide never triggers
+   layout. */
+@keyframes browseDockPanelIn {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.browse-details-dock-panel {
+  animation: browseDockPanelIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Locker Hero animations */
 @keyframes slideInLeft {
   from {
@@ -1144,7 +1169,8 @@ body {
   .group:focus-within .browse-sound-wave-bar,
   .sidebar-active-backdrop,
   .sidebar-active-backdrop__image,
-  .browse-result-card {
+  .browse-result-card,
+  .browse-details-dock-panel {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }

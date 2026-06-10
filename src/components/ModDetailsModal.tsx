@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Volume2,
@@ -92,7 +92,7 @@ interface ModDetailsModalProps {
   onViewArtist?: (artist: { id: number; name: string; avatarUrl?: string; profileUrl?: string; kofiUrl?: string }) => void;
 }
 
-export default function ModDetailsModal({
+function ModDetailsModal({
   mod,
   section,
   installed,
@@ -581,10 +581,10 @@ export default function ModDetailsModal({
       aria-hidden
     >
       {/* Match the real body's layout per variant: the sidebar stacks into one
-          column, so its loading skeleton must too (the modal's lg:flex-row /
-          460px image column would overflow and clip a ~440px panel). */}
-      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${isSidebar ? '' : 'lg:flex-row'}`}>
-        <div className={`space-y-3 overflow-hidden ${isSidebar ? 'p-4' : 'lg:w-[460px] lg:flex-shrink-0 p-5 lg:pr-3'}`}>
+          column on a narrow dock and goes two-column past 56rem of panel
+          width (same @4xl container breakpoint as the real body below). */}
+      <div className={`flex h-full min-h-0 flex-col overflow-hidden ${isSidebar ? '@4xl:flex-row' : 'lg:flex-row'}`}>
+        <div className={`space-y-3 overflow-hidden ${isSidebar ? 'p-4 @4xl:w-[460px] @4xl:flex-shrink-0 @4xl:pr-3' : 'lg:w-[460px] lg:flex-shrink-0 p-5 lg:pr-3'}`}>
           <Skeleton className="aspect-[16/9] w-full" rounded="lg" />
           {!isSidebar && <Skeleton className="aspect-[16/10] w-full" rounded="lg" />}
           <div className="rounded-lg border border-border bg-bg-tertiary p-3">
@@ -655,23 +655,24 @@ export default function ModDetailsModal({
 
   // The sidebar shares this whole JSX tree with the modal; only the outer
   // chrome and the body layout differ. The caller's <aside> supplies the
-  // sidebar's width/height/border, so here we just fill it and force the
-  // single-column stacked body (the modal's lg:flex-row two-column layout is
-  // viewport-keyed and would overflow a ~440px panel on a wide screen).
+  // sidebar's width/height/border, so here we just fill it. The sidebar body
+  // is keyed to the PANEL's width via container queries (@container/@4xl),
+  // not the viewport: a narrow dock stacks into one column, and a dock
+  // dragged wide enough (56rem+) gets the modal's two-column layout.
   const outerClass = isSidebar
-    ? 'h-full w-full'
+    ? 'h-full w-full @container'
     : 'fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in';
   const panelClass = isSidebar
     ? 'relative bg-bg-secondary h-full w-full overflow-hidden flex flex-col'
     : 'relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl h-[min(90vh,920px)] max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl';
   const bodyContentClass = isSidebar
-    ? 'mod-details-body-content flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain'
+    ? 'mod-details-body-content flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain @4xl:flex-row @4xl:overflow-hidden'
     : 'mod-details-body-content flex h-full min-h-0 flex-col lg:flex-row overflow-y-auto overscroll-contain lg:overflow-hidden';
   const imageColClass = isSidebar
-    ? 'p-4 space-y-3'
+    ? 'p-4 space-y-3 @4xl:w-[460px] @4xl:flex-shrink-0 @4xl:overflow-y-auto @4xl:overscroll-contain @4xl:max-h-full @4xl:pr-3'
     : 'lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:overscroll-contain lg:max-h-full p-5 lg:pr-3 space-y-3';
   const detailsColClass = isSidebar
-    ? 'flex-1 min-w-0 p-4 space-y-5'
+    ? 'flex-1 min-w-0 p-4 space-y-5 @4xl:overflow-y-auto @4xl:overscroll-contain @4xl:max-h-full @4xl:pl-3'
     : 'flex-1 min-w-0 lg:overflow-y-auto lg:overscroll-contain lg:max-h-full p-5 lg:pl-3 space-y-5';
 
   const modal = (
@@ -1633,3 +1634,9 @@ export default function ModDetailsModal({
   // modal needs to escape to a body-level portal.
   return isSidebar ? modal : createPortal(modal, document.body);
 }
+
+// Memoized because the docked-sidebar variant lives inside Browse's render
+// tree, which re-renders on every virtualized-grid range change while
+// scrolling. Browse passes stable callbacks (useStableCallback) so shallow
+// prop comparison holds between those renders.
+export default memo(ModDetailsModal);

@@ -65,6 +65,7 @@ import {
   backfillGameBananaFileId,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { useStableCallback } from '../lib/useStableCallback';
 import type {
   GameBananaMod,
   GameBananaModDetails,
@@ -110,7 +111,6 @@ const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
 const BROWSE_SIDEBAR_MIN_WINDOW_WIDTH = 760;
 const BROWSE_SIDEBAR_WIDTH_KEY = 'browseDetailsSidebarWidth';
 const BROWSE_SIDEBAR_WIDTH_MIN = 320;
-const BROWSE_SIDEBAR_WIDTH_MAX = 720;
 const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // The grid always keeps at least this much room; the sidebar's effective width
 // is capped so a wide drag (or a small window) can't starve the browse area.
@@ -180,14 +180,24 @@ function browseSocialColor(platform: string): string {
   return BROWSE_SOCIAL_COLORS[platform] ?? '#f97316';
 }
 
-function clampSidebarWidth(value: number): number {
-  return clampNumber(value, BROWSE_SIDEBAR_WIDTH_MIN, BROWSE_SIDEBAR_WIDTH_MAX);
+// No fixed maximum width: the only hard limits are "the panel stays usable"
+// (BROWSE_SIDEBAR_WIDTH_MIN) and "the grid keeps its reserve". On a wide
+// monitor the user can drag the sidebar as wide as they like; the panel's
+// internal layout adapts via container queries (see ModDetailsModal).
+function sidebarWidthCeilingFor(windowWidth: number): number {
+  return Math.max(BROWSE_SIDEBAR_WIDTH_MIN, windowWidth - BROWSE_SIDEBAR_GRID_RESERVE);
+}
+
+function clampSidebarWidth(value: number, ceiling: number): number {
+  return clampNumber(value, BROWSE_SIDEBAR_WIDTH_MIN, Math.max(BROWSE_SIDEBAR_WIDTH_MIN, ceiling));
 }
 
 function readBrowseSidebarWidth(): number {
   if (typeof window === 'undefined') return BROWSE_SIDEBAR_WIDTH_DEFAULT;
   const stored = Number(window.localStorage.getItem(BROWSE_SIDEBAR_WIDTH_KEY));
-  return Number.isFinite(stored) && stored > 0 ? clampSidebarWidth(stored) : BROWSE_SIDEBAR_WIDTH_DEFAULT;
+  return Number.isFinite(stored) && stored > 0
+    ? clampSidebarWidth(stored, sidebarWidthCeilingFor(window.innerWidth))
+    : BROWSE_SIDEBAR_WIDTH_DEFAULT;
 }
 // Persist filter UI inputs across page navigation. The store keeps these in
 // memory so visiting Installed and coming back doesn't blow away the user's
@@ -394,13 +404,13 @@ function estimateBrowseRowHeight(
 function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
   switch (tone) {
     case 'accent':
-      return 'border-accent/14 bg-accent/[0.04] text-accent/72';
+      return 'border-accent/25 bg-accent/[0.08] text-accent';
     case 'danger':
-      return 'border-state-danger/20 bg-state-danger/[0.05] text-state-danger/80';
+      return 'border-state-danger/30 bg-state-danger/[0.09] text-state-danger';
     case 'info':
-      return 'border-state-info/14 bg-state-info/[0.04] text-state-info/72';
+      return 'border-state-info/25 bg-state-info/[0.08] text-state-info';
     default:
-      return 'border-white/[0.06] bg-white/[0.018] text-text-tertiary/72';
+      return 'border-white/[0.1] bg-white/[0.04] text-text-secondary';
   }
 }
 
@@ -466,7 +476,8 @@ function getReadableCardChips(mod: GameBananaMod, section: string, inferredHero:
 }
 
 function estimateReadableChipWidth(label: string): number {
-  return Math.ceil(label.length * 5.5 + 14);
+  // ~6px per character at the chip's 11px font, plus horizontal padding.
+  return Math.ceil(label.length * 6 + 14);
 }
 
 function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
@@ -485,7 +496,7 @@ function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
   return (
     <span
       title={chip.label}
-      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[10px] font-medium leading-none ${readableChipTone(
+      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[11px] font-medium leading-none ${readableChipTone(
         chip.tone
       )}`}
     >
@@ -535,7 +546,7 @@ function BrowseReadableChipRow({
         <div className="group/hidden relative shrink-0">
           <span
             title={`${hiddenChips.length} more`}
-            className="inline-flex h-6 items-center rounded-sm border border-white/[0.06] bg-white/[0.018] px-2 text-[10px] font-medium leading-none text-text-tertiary/72"
+            className="inline-flex h-6 items-center rounded-sm border border-white/[0.1] bg-white/[0.04] px-2 text-[11px] font-medium leading-none text-text-secondary"
           >
             +{hiddenChips.length}
           </span>
@@ -579,7 +590,7 @@ function BrowseReadableUpdatedLine({
     return (
       <p
         className={`mt-1 truncate text-[clamp(9px,3.5714cqw,11px)] font-normal leading-[1.05] ${
-          isOutdated ? 'text-state-warning/70' : 'text-text-tertiary/55'
+          isOutdated ? 'text-state-warning/85' : 'text-text-tertiary/75'
         }`}
         title={title}
       >
@@ -591,7 +602,7 @@ function BrowseReadableUpdatedLine({
   return (
     <span
       className={`inline-flex min-w-0 shrink items-center gap-0.5 truncate font-normal leading-none ${
-        isOutdated ? 'text-state-warning/80' : 'text-text-tertiary/55'
+        isOutdated ? 'text-state-warning/85' : 'text-text-tertiary/75'
       }`}
       title={title}
     >
@@ -711,8 +722,8 @@ function BrowseStatItem({
 function BrowseReadableStatsRow({ mod, density, showUpdated }: { mod: GameBananaMod; density: BrowseReadableDensity; showUpdated: boolean }) {
   const isMicro = density === 'micro';
   const groupClass = isMicro
-    ? 'grid w-full grid-cols-2 items-center text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/70'
-    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/60';
+    ? 'grid w-full grid-cols-2 items-center text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/85'
+    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/85';
   const itemEmphasis = isMicro ? 'strong' : 'muted';
 
   return (
@@ -1064,6 +1075,9 @@ export default function Browse() {
   const pendingScrollTopRef = useRef<number | null>(initialCache?.scrollTop ?? null);
   // The outer scroll container — same element with `h-full overflow-y-auto`.
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  // The virtualized grid's relative wrapper (the div sized to getTotalSize()).
+  // Used by the scroll anchor below to translate scrollTop into item space.
+  const gridWrapRef = useRef<HTMLDivElement | null>(null);
   // Live mirror of the scroll container's scrollTop. Updated from a scroll
   // listener so the unmount cleanup has a valid value to persist — by the
   // time a useEffect cleanup runs, React has already detached
@@ -1072,6 +1086,11 @@ export default function Browse() {
   const latestScrollTopRef = useRef<number>(initialCache?.scrollTop ?? 0);
   const scrollCacheFrameRef = useRef<number | null>(null);
   const scrollHoverTimeoutRef = useRef<number | null>(null);
+  // Live "user is scrolling" flag. Deliberately NOT React state: flipping
+  // state on scroll start/stop re-rendered the whole page (and busted every
+  // visible card's memo via the suppressHoverIntent prop). The scroll
+  // listener toggles the container's browse-is-scrolling class imperatively
+  // for the CSS hover suppression, and cards read this ref at event time.
   const isBrowseScrollingRef = useRef(false);
   // When local search fails (e.g. SQLite error), this flips so the main fetch
   // effect falls back to the API path. Resets whenever filter inputs change.
@@ -1080,7 +1099,6 @@ export default function Browse() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
   const [playingModId, setPlayingModId] = useState<number | null>(null);
-  const [isBrowseScrolling, setIsBrowseScrolling] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1134,10 +1152,10 @@ export default function Browse() {
   // so the grid keeps BROWSE_SIDEBAR_GRID_RESERVE px no matter how the user drags
   // or how small the window is.
   const [browseSidebarWidth, setBrowseSidebarWidthState] = useState<number>(readBrowseSidebarWidth);
-  const sidebarWidthCeiling = browseViewportMetrics.windowWidth
-    ? Math.max(BROWSE_SIDEBAR_WIDTH_MIN, browseViewportMetrics.windowWidth - BROWSE_SIDEBAR_GRID_RESERVE)
-    : BROWSE_SIDEBAR_WIDTH_MAX;
-  const effectiveSidebarWidth = Math.min(clampSidebarWidth(browseSidebarWidth), sidebarWidthCeiling);
+  const sidebarWidthCeiling = sidebarWidthCeilingFor(
+    browseViewportMetrics.windowWidth || window.innerWidth
+  );
+  const effectiveSidebarWidth = clampSidebarWidth(browseSidebarWidth, sidebarWidthCeiling);
   // Tears down an in-flight sidebar drag (listeners + body styles). Held in a ref
   // so an unmount can finish a drag that's still mid-gesture, instead of leaking
   // the window listeners and stranding the col-resize cursor on <body>.
@@ -1147,8 +1165,7 @@ export default function Browse() {
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     const onMove = (ev: PointerEvent) => {
-      const ceiling = Math.max(BROWSE_SIDEBAR_WIDTH_MIN, window.innerWidth - BROWSE_SIDEBAR_GRID_RESERVE);
-      const next = Math.min(clampSidebarWidth(window.innerWidth - ev.clientX), ceiling);
+      const next = clampSidebarWidth(window.innerWidth - ev.clientX, sidebarWidthCeilingFor(window.innerWidth));
       setBrowseSidebarWidthState(next);
     };
     const cleanup = () => {
@@ -1422,7 +1439,7 @@ export default function Browse() {
       latestScrollTopRef.current = nextScrollTop;
       if (!isBrowseScrollingRef.current) {
         isBrowseScrollingRef.current = true;
-        setIsBrowseScrolling(true);
+        container.classList.add('browse-is-scrolling');
       }
       if (scrollHoverTimeoutRef.current !== null) {
         window.clearTimeout(scrollHoverTimeoutRef.current);
@@ -1430,7 +1447,7 @@ export default function Browse() {
       scrollHoverTimeoutRef.current = window.setTimeout(() => {
         scrollHoverTimeoutRef.current = null;
         isBrowseScrollingRef.current = false;
-        setIsBrowseScrolling(false);
+        container.classList.remove('browse-is-scrolling');
       }, 140);
       if (scrollCacheFrameRef.current !== null) return;
       scrollCacheFrameRef.current = window.requestAnimationFrame(() => {
@@ -2161,7 +2178,7 @@ export default function Browse() {
     }
   };
 
-  const handleNavigateMod = async (mod: GameBananaMod, direction: ModDetailsNavigationDirection) => {
+  const handleNavigateMod = async (mod: GameBananaMod, direction: ModDetailsNavigationDirection): Promise<void> => {
     if (modalNavigation) return;
 
     const requestId = modalNavigationRequestRef.current + 1;
@@ -2183,7 +2200,10 @@ export default function Browse() {
     }
   };
 
-  const handleDownload = async (fileId: number, fileName: string) => {
+  // Stable identity (useStableCallback) so the memoized ModDetailsModal does
+  // not re-render every time this large component does (e.g. on every
+  // virtualizer range change while the docked sidebar is open).
+  const handleDownload = useStableCallback(async (fileId: number, fileName: string) => {
     if (!selectedMod || !activeDeadlockPath) return;
 
     // The first file claims the active slot (shows progress); additional clicks
@@ -2205,7 +2225,7 @@ export default function Browse() {
         cur && cur.modId === selectedMod.id && cur.fileId === fileId ? null : cur
       );
     }
-  };
+  });
 
   const handleQuickDownload = async (mod: GameBananaMod) => {
     if (!activeDeadlockPath) return;
@@ -2476,22 +2496,31 @@ export default function Browse() {
     selectedModIndex >= 0 && selectedModIndex < displayMods.length - 1
       ? displayMods[selectedModIndex + 1]
       : undefined;
-  const closeSelectedMod = () => {
+  // These three (plus handleDownload above) feed the memoized ModDetailsModal,
+  // so they get stable identities via useStableCallback.
+  const closeSelectedMod = useStableCallback(() => {
     modalNavigationRequestRef.current += 1;
     setModalNavigation(null);
     setSelectedMod(null);
     setSelectedModDates(null);
-  };
+  });
+
+  const navigateToPreviousMod = useStableCallback(() => {
+    if (previousSelectedMod) void handleNavigateMod(previousSelectedMod, 'previous');
+  });
+  const navigateToNextMod = useStableCallback(() => {
+    if (nextSelectedMod) void handleNavigateMod(nextSelectedMod, 'next');
+  });
 
   // Enter artist mode: scope the grid to one submitter. We leave the user's
   // search/hero/category filters untouched (artist mode ignores them in the
   // fetch) so clearing artist mode restores their prior browse exactly.
-  const viewArtist = (artist: BrowseArtistRef) => {
+  const viewArtist = useStableCallback((artist: BrowseArtistRef) => {
     if (!artist?.id) return;
     closeSelectedMod();
     setBrowseUi({ submitter: artist });
     scrollContainerRef.current?.scrollTo({ top: 0 });
-  };
+  });
   const clearArtist = () => setBrowseUi({ submitter: undefined });
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
@@ -2536,6 +2565,35 @@ export default function Browse() {
     rowVirtualizer.measure();
   }, [rowVirtualizer, virtualRowHeight, virtualColumnCount, gridGap, browseCardDesign]);
 
+  // Scroll anchor: when the grid's geometry changes (column count or row
+  // height, e.g. the details sidebar opening/closing or a window resize),
+  // the same scrollTop suddenly points at different mods and the view appears
+  // to jump. Re-map the scroll position so the first visible item stays put.
+  // Fractional row math (no rounding to row starts) so repeated resizes don't
+  // ratchet the position. Runs before paint, so the user never sees the
+  // un-anchored frame.
+  const gridAnchorRef = useRef<{ columnCount: number; rowHeight: number; measured: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const prev = gridAnchorRef.current;
+    const measured = browseViewportMetrics !== DEFAULT_BROWSE_VIEWPORT_METRICS;
+    gridAnchorRef.current = { columnCount: virtualColumnCount, rowHeight: virtualRowHeight, measured };
+    if (!prev || !prev.measured) return; // first paint, or geometry from the pre-measure default
+    if (prev.columnCount === virtualColumnCount && prev.rowHeight === virtualRowHeight) return;
+    const container = scrollContainerRef.current;
+    const gridWrap = gridWrapRef.current;
+    if (!container || !gridWrap) return;
+    const gridTop =
+      gridWrap.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    const scrolled = container.scrollTop - gridTop;
+    if (scrolled <= 0) return;
+    const itemOffset = (scrolled / prev.rowHeight) * prev.columnCount;
+    // Round: a fractional scrollTop rasterizes the whole grid at a subpixel
+    // offset, which blurs text until the next user scroll.
+    container.scrollTop = Math.round(gridTop + (itemOffset / virtualColumnCount) * virtualRowHeight);
+    latestScrollTopRef.current = container.scrollTop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualColumnCount, virtualRowHeight]);
+
   if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
@@ -2561,7 +2619,7 @@ export default function Browse() {
         installed={installedIds.has(selectedMod.id)}
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
-        onEnableFile={(modId) => toggleMod(modId)}
+        onEnableFile={toggleMod}
         downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
         queuedFileIds={selectedQueuedFileIds}
         extracting={extracting}
@@ -2574,10 +2632,8 @@ export default function Browse() {
         navigationLabel={modalNavigation?.label}
         onClose={closeSelectedMod}
         onDownload={handleDownload}
-        onNavigatePrevious={
-          previousSelectedMod ? () => void handleNavigateMod(previousSelectedMod, 'previous') : undefined
-        }
-        onNavigateNext={nextSelectedMod ? () => void handleNavigateMod(nextSelectedMod, 'next') : undefined}
+        onNavigatePrevious={previousSelectedMod ? navigateToPreviousMod : undefined}
+        onNavigateNext={nextSelectedMod ? navigateToNextMod : undefined}
         previousLabel={previousSelectedMod?.name}
         nextLabel={nextSelectedMod?.name}
         onDeleteFile={deleteMod}
@@ -2587,7 +2643,10 @@ export default function Browse() {
 
   return (
     <div className="flex h-full min-h-0">
-      <div className={`flex-1 min-w-0 h-full overflow-y-auto ${isBrowseScrolling ? 'browse-is-scrolling' : ''}`} ref={scrollContainerRef}>
+      {/* The scroll listener toggles browse-is-scrolling on this element
+          imperatively; keeping it out of the className prop means scroll
+          start/stop never re-renders this (large) component. */}
+      <div className="flex-1 min-w-0 h-full overflow-y-auto" ref={scrollContainerRef}>
       {/* Header: artist banner in artist mode, otherwise the search/filter row. */}
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         {artistMode && submitter ? (
@@ -3252,6 +3311,7 @@ export default function Browse() {
           const virtualRows = rowVirtualizer.getVirtualItems();
           return (
             <div
+              ref={gridWrapRef}
               className="relative w-full"
               style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
             >
@@ -3299,7 +3359,7 @@ export default function Browse() {
                             onVolumeChange={setSoundVolume}
                             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
                             isPlaying={playingModId === mod.id}
-                            suppressHoverIntent={isBrowseScrolling}
+                            suppressHoverIntentRef={isBrowseScrollingRef}
                             enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
                             actionContextKey={`${activeDeadlockPath ?? ''}|${section}|${effectiveCategoryId ?? ''}`}
                             onPlayingChange={(playing) => {
@@ -3375,20 +3435,25 @@ export default function Browse() {
           column count, so the grid reflows to fewer columns on its own. */}
       {selectedMod && detailsSidebarActive && (
         <aside
-          className="relative flex-shrink-0 h-full border-l border-border bg-bg-secondary overflow-hidden animate-fade-in"
+          className="relative flex-shrink-0 h-full bg-bg-primary overflow-hidden"
           style={{ width: effectiveSidebarWidth }}
         >
-          {/* Drag the left edge to resize; the width is remembered. */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize details sidebar"
-            onPointerDown={startSidebarResize}
-            className="group absolute inset-y-0 left-0 z-30 w-2 -ml-1 cursor-col-resize"
-          >
-            <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
+          {/* The border and resize handle live on the sliding panel so the
+              dock's left edge arrives with the content instead of popping in
+              ahead of it. */}
+          <div className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary">
+            {/* Drag the left edge to resize; the width is remembered. */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize details sidebar"
+              onPointerDown={startSidebarResize}
+              className="group absolute inset-y-0 left-0 z-30 w-2 -ml-1 cursor-col-resize"
+            >
+              <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
+            </div>
+            {renderModDetails('sidebar')}
           </div>
-          {renderModDetails('sidebar')}
         </aside>
       )}
     </div>
@@ -3409,7 +3474,7 @@ function ReadableBrowseModCard({
   onVolumeChange,
   hideNsfwPreviews,
   isPlaying,
-  suppressHoverIntent,
+  suppressHoverIntentRef,
   onPlayingChange,
   onClick,
   onQuickDownload,
@@ -3522,19 +3587,12 @@ function ReadableBrowseModCard({
     />
   );
 
-  useEffect(() => {
-    if (!suppressHoverIntent) return;
-    if (isPlaying) return;
-    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
-    return () => window.clearTimeout(timeout);
-  }, [isPlaying, suppressHoverIntent]);
-
   return (
     <div
       onClick={onClick}
       onKeyDown={(e) => handleCardKeyDown(e, onClick)}
       onMouseEnter={() => {
-        if (!suppressHoverIntent) setAudioControlsActive(true);
+        if (!suppressHoverIntentRef?.current) setAudioControlsActive(true);
       }}
       onMouseLeave={() => {
         if (!isPlaying) setAudioControlsActive(false);
@@ -3549,7 +3607,7 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414]/90 text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414] text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -3573,8 +3631,10 @@ function ReadableBrowseModCard({
         )}
 
         <div className={`${titleMarginClass} min-w-0`}>
+          {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
+              bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`block truncate font-mod-title font-bold text-[#eee8df] ${
+            className={`block truncate font-mod-title font-semibold text-[#eee8df] ${
               isMicro
                 ? 'text-[13px] leading-4'
                 : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
@@ -3584,7 +3644,7 @@ function ReadableBrowseModCard({
             {mod.name}
           </h3>
           {showAuthor && (
-            <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/64">
+            <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85">
               by {mod.submitter?.name ?? 'Unknown author'}
             </p>
           )}
@@ -3700,7 +3760,10 @@ interface ModCardProps {
   onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
   isPlaying: boolean;
-  suppressHoverIntent?: boolean;
+  /** Shared "user is scrolling" flag from the grid. A ref, not a boolean, so
+   *  scroll start/stop never re-renders cards; event handlers read .current.
+   *  Hover visuals are suppressed separately in CSS via browse-is-scrolling. */
+  suppressHoverIntentRef?: React.RefObject<boolean>;
   enableModId?: string;
   actionContextKey?: string;
   onPlayingChange: (playing: boolean) => void;
@@ -3735,7 +3798,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
@@ -3758,13 +3821,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
   const [audioControlsActive, setAudioControlsActive] = useState(false);
 
-  useEffect(() => {
-    if (!suppressHoverIntent) return;
-    if (isPlaying) return;
-    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
-    return () => window.clearTimeout(timeout);
-  }, [isPlaying, suppressHoverIntent]);
-
   // List view keeps original layout
   if (isList) {
     return (
@@ -3772,7 +3828,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}
         onMouseEnter={() => {
-          if (!suppressHoverIntent) setAudioControlsActive(true);
+          if (!suppressHoverIntentRef?.current) setAudioControlsActive(true);
         }}
         onMouseLeave={() => {
           if (!isPlaying) setAudioControlsActive(false);
@@ -3909,7 +3965,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   // Grid/Compact: overlay card — image fills card, info overlaid at bottom
   if (cardDesign === 'readable') {
     return (
-      <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+      <BrowseArtParallaxCard>
         <ReadableBrowseModCard
           mod={mod}
           installed={installed}
@@ -3926,7 +3982,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           onVolumeChange={onVolumeChange}
           hideNsfwPreviews={hideNsfwPreviews}
           isPlaying={isPlaying}
-          suppressHoverIntent={suppressHoverIntent}
+          suppressHoverIntentRef={suppressHoverIntentRef}
           onPlayingChange={onPlayingChange}
           onClick={onClick}
           onQuickDownload={onQuickDownload}
@@ -3938,12 +3994,12 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
 
   const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
-    <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+    <BrowseArtParallaxCard>
       <div
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}
         onMouseEnter={() => {
-          if (!suppressHoverIntent) setAudioControlsActive(true);
+          if (!suppressHoverIntentRef?.current) setAudioControlsActive(true);
         }}
         onMouseLeave={() => {
           if (!isPlaying) setAudioControlsActive(false);
@@ -4256,7 +4312,7 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.volume === next.volume &&
   prev.hideNsfwPreviews === next.hideNsfwPreviews &&
   prev.isPlaying === next.isPlaying &&
-  prev.suppressHoverIntent === next.suppressHoverIntent &&
+  prev.suppressHoverIntentRef === next.suppressHoverIntentRef &&
   prev.enableModId === next.enableModId &&
   prev.actionContextKey === next.actionContextKey
 ));
