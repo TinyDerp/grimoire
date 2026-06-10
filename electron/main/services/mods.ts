@@ -24,6 +24,10 @@ export const ENABLE_LIMIT_MESSAGE =
 
 type CollisionMetadataOwner = 'enabled' | 'disabled';
 
+/** Filesystem-level mod record produced by scanMods. NOT the renderer-facing
+ *  Mod from src/types/mod.ts: that wire type is a superset that the ipc
+ *  layer's enrichMod builds from this plus the metadata sidecar (globalType,
+ *  lockerCosmetics, abilitySounds, ...). Keep new wire-only fields there. */
 export interface Mod {
     id: string;
     name: string;
@@ -278,7 +282,7 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
-    await reconcileEnabledDisabledCollisions(deadlockPath, addonsPath, disabledPath);
+    await reconcileEnabledDisabledCollisions(addonsPath, disabledPath);
 
     // Scan every enabled addon folder (base citadel/addons plus any overflow
     // addons1, addons2, ...) and the single shared .disabled parking lot. Each
@@ -302,7 +306,6 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
 }
 
 async function reconcileEnabledDisabledCollisions(
-    deadlockPath: string,
     addonsPath: string,
     disabledPath: string
 ): Promise<void> {

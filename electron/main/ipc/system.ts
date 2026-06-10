@@ -5,8 +5,8 @@ import {
     getGameinfoStatus,
     fixGameinfo,
     cleanupAddons,
-    GameinfoStatus,
-    CleanupResult,
+    type GameinfoStatus,
+    type CleanupResult,
 } from '../services/system';
 import { listArchiveContents } from '../services/extract';
 import { healLockerVpks } from '../services/lockerVpk';
@@ -34,28 +34,12 @@ import {
     setModMetadataWithHash,
     deleteModMetadata,
 } from '../services/metadata';
-
-interface OpenDialogOptions {
-    directory?: boolean;
-    title?: string;
-    defaultPath?: string;
-    filters?: Array<{ name: string; extensions: string[] }>;
-}
-
-interface SetMinaPresetArgs {
-    presetFileName: string;
-}
-
-interface ListMinaVariantsArgs {
-    archivePath: string;
-}
-
-interface ApplyMinaVariantArgs {
-    archivePath: string;
-    archiveEntry: string;
-    presetLabel: string;
-    heroCategoryId?: number;
-}
+import type {
+    OpenDialogOptions,
+    SetMinaPresetArgs,
+    ListMinaVariantsArgs,
+    ApplyMinaVariantArgs,
+} from '../../../src/types/electron';
 
 async function loadClipboardImage(source: string): Promise<Electron.NativeImage> {
     if (!source) {
@@ -233,7 +217,7 @@ ipcMain.handle('download-mina-variations', async (): Promise<string> => {
     await new Promise<void>((resolve, reject) => {
         const followRedirects = (url: string) => {
             const protocol = url.startsWith('https') ? https : http;
-            protocol.get(url, (response: { statusCode: number; headers: { location?: string }; pipe: (arg: NodeJS.WritableStream) => void }) => {
+            protocol.get(url, (response) => {
                 if (response.statusCode === 301 || response.statusCode === 302) {
                     const redirectUrl = response.headers.location;
                     if (redirectUrl) {

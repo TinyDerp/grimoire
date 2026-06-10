@@ -11,50 +11,25 @@ import {
     fetchSubmitterLinks,
     fetchCollection,
     fetchCollectionItems,
-    GameBananaSection,
-    GameBananaCategoryNode,
-    GameBananaModsResponse,
-    GameBananaModDetails,
-    GameBananaModFileList,
-    GameBananaModUpdatesResponse,
-    GameBananaCollection,
-    GameBananaCollectionItemsResponse,
+    type GameBananaSection,
+    type GameBananaCategoryNode,
+    type GameBananaModsResponse,
+    type GameBananaModDetails,
+    type GameBananaModFileList,
+    type GameBananaModUpdatesResponse,
+    type GameBananaCollection,
+    type GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, resolveSuspiciousFileDecision, resolveMultiVpkPick, DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, resolveSuspiciousFileDecision, resolveMultiVpkPick, type DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
+import type {
+    BrowseModsArgs,
+    GetModDetailsArgs,
+    GetModCommentsArgs,
+    GetModUpdatesArgs,
+    GetCategoriesArgs,
+} from '../../../src/types/electron';
 import { updateModNsfw } from '../services/modDatabase';
-
-interface BrowseModsArgs {
-    page: number;
-    perPage: number;
-    search?: string;
-    section?: string;
-    categoryId?: number;
-    sort?: string;
-    submitterId?: number;
-}
-
-interface GetModDetailsArgs {
-    modId: number;
-    section?: string;
-    includeSubmitter?: boolean;
-}
-
-interface GetModCommentsArgs {
-    modId: number;
-    section?: string;
-    page?: number;
-}
-
-interface GetModUpdatesArgs {
-    modId: number;
-    section?: string;
-    page?: number;
-}
-
-interface GetCategoriesArgs {
-    categoryModelName: string;
-}
 
 /**
  * Get the active deadlock path from settings
