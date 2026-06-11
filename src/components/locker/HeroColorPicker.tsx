@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { Palette, Loader2, AlertCircle, Check, RefreshCw, RotateCcw, Sparkles, Blend } from 'lucide-react';
+import {
+  Palette,
+  Loader2,
+  AlertCircle,
+  Check,
+  RefreshCw,
+  RotateCcw,
+  Sparkles,
+  Blend,
+  Wand2,
+} from 'lucide-react';
 import {
   applyHeroColor,
   applyHeroPrism,
+  applyTrippyVfx,
   previewHeroColor,
   revertHeroColor,
   getActiveHeroColor,
-  getHeroColorSupport,
   getGameRunningStatus,
 } from '../../lib/api';
 import {
@@ -19,9 +29,20 @@ import {
   parseGradientSpec,
   type GStop,
 } from '../../lib/abilityColorPreview';
+import { TRIPPY_ANIMATION_LABELS as ANIMATION_LABELS, TRIPPY_STYLE_LABELS } from '../../lib/trippy';
+import TrippyPatternPicker from './TrippyPatternPicker';
+import {
+  TRIPPY_ANIMATION_STYLES,
+  type TrippyAnimationStyle,
+  type TrippyStyleName,
+  type TrippyVfxChoice,
+  type TrippyVfxTargets,
+} from '../../types/mod';
 
 interface HeroColorPickerProps {
   heroName: string;
+  /** Lets the parent surface toggle show an applied dot for this surface. */
+  onAppliedChange?: (applied: boolean) => void;
 }
 
 /** Default target when nothing is applied yet: 280 (purple) at source
@@ -72,17 +93,26 @@ function approxSwatch(hue: number, saturation: number, brightness: number): stri
 
 const pct = (scale: number): number => Math.round(scale * 100);
 
+/** Quantize to the same 2 decimals the main process keys its caches by, so the
+ *  trippy dirty check compares like with like. */
+const q = (x: number): number => Math.round(x * 100) / 100;
+
+type ColorMode = 'hue' | 'prism' | 'gradient' | 'trippy';
+
 /**
- * EXPERIMENTAL: recolor a hero's ability VFX (particles + color textures + baked
- * vertex colors) to a chosen color. The target is hue + a saturation scale + a
- * brightness scale, so pale/pastel colors (e.g. light blue) are reachable, not
- * just a flat hue rotation. The pick is baked by the bundled vpkmerge
- * `recolor-hero` and isolated into a single Locker-managed VPK that wins by load
- * order; remove it to revert to vanilla. Only heroes with a pinned recipe are
- * supported (Paige today); others show a coming-soon notice.
+ * The Abilities surface of the Effects panel: repaint a hero's ability VFX
+ * (particles + color textures + baked vertex colors). Four modes over the SAME
+ * selection slot (one recolor per hero, applying any mode replaces the others):
+ *  - hue: a single picked color (hue + saturation scale + brightness scale, so
+ *    pale/pastel colors are reachable, not just a flat hue rotation)
+ *  - prism: spread the existing colors across the rainbow
+ *  - gradient: spread them over a chosen ramp
+ *  - trippy: paint + animate the particles with a procedural pattern
+ * The pick is baked by the bundled vpkmerge and isolated into a single
+ * Locker-managed VPK that wins by load order; remove it to revert to vanilla.
+ * Rendered only when the parent has confirmed hero support (pinned recipe).
  */
-export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
-  const [supported, setSupported] = useState<boolean | null>(null);
+export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColorPickerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // The target currently applied in-game (null when none), and the live picks.
@@ -92,20 +122,27 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   const [hue, setHue] = useState(DEFAULT_HUE);
   const [saturation, setSaturation] = useState(DEFAULT_SCALE);
   const [brightness, setBrightness] = useState(DEFAULT_SCALE);
-  // Recolor mode: a single picked color, the rainbow prism, or a custom gradient.
-  const [mode, setMode] = useState<'hue' | 'prism' | 'gradient'>('hue');
+  // Recolor mode: a single picked color, the rainbow prism, a custom gradient,
+  // or the procedural trippy paint. All four share the one-per-hero slot.
+  const [mode, setMode] = useState<ColorMode>('hue');
   const [animated, setAnimated] = useState(false);
   // Gradient mode: the chosen preset name (or 'custom') and the custom editor stops.
   const [gradientPreset, setGradientPreset] = useState<string>(GRADIENT_PRESETS[0].name);
   const [customStops, setCustomStops] = useState<GStop[]>(DEFAULT_CUSTOM_STOPS);
-  // What's applied in-game: the mode (null = nothing), its animated flag, and
-  // gradient. 'trippy' means the Effects tab owns this hero's VFX right now;
-  // applying a color here replaces it (one recolor per hero).
-  const [activeMode, setActiveMode] = useState<'hue' | 'prism' | 'gradient' | 'trippy' | null>(
-    null,
-  );
+  // Trippy mode knobs (separate from the color knobs above; they mean different
+  // things and shouldn't reset each other when switching modes).
+  const [trippyStyle, setTrippyStyle] = useState<TrippyStyleName>('confetti');
+  const [trippyIntensity, setTrippyIntensity] = useState(1);
+  const [trippyPhase, setTrippyPhase] = useState(0);
+  const [animationStyle, setAnimationStyle] = useState<TrippyAnimationStyle>('cycle');
+  const [animationIntensity, setAnimationIntensity] = useState(1);
+  const [vfxTargets, setVfxTargets] = useState<TrippyVfxTargets>('all');
+  // What's applied in-game: the mode (null = nothing), its animated flag,
+  // gradient, and the trippy params when mode is 'trippy'.
+  const [activeMode, setActiveMode] = useState<ColorMode | null>(null);
   const [activeAnimated, setActiveAnimated] = useState(false);
   const [activeGradient, setActiveGradient] = useState<string | null>(null);
+  const [activeTrippy, setActiveTrippy] = useState<TrippyVfxChoice | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
@@ -131,13 +168,11 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     setGradientPreset(GRADIENT_PRESETS[0].name);
     setCustomStops(DEFAULT_CUSTOM_STOPS);
     Promise.all([
-      getHeroColorSupport(heroName),
       getActiveHeroColor(heroName),
       getGameRunningStatus().catch(() => ({ running: false })),
     ])
-      .then(([isSupported, active, status]) => {
+      .then(([active, status]) => {
         if (!mounted.current) return;
-        setSupported(isSupported);
         const activeM = active ? (active.mode ?? 'hue') : null;
         setActiveMode(activeM);
         setActiveHue(active?.hue ?? null);
@@ -145,7 +180,17 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
         setActiveBrightness(active?.brightness ?? null);
         setActiveAnimated(active?.animated ?? false);
         setActiveGradient(active?.gradient ?? null);
-        if (active && (activeM === 'prism' || activeM === 'gradient')) {
+        const trippy = activeM === 'trippy' ? (active?.trippy ?? null) : null;
+        setActiveTrippy(trippy);
+        if (trippy) {
+          setMode('trippy');
+          setTrippyStyle(trippy.style);
+          setTrippyIntensity(trippy.intensity);
+          setTrippyPhase(trippy.phase);
+          setAnimationStyle(trippy.animationStyle);
+          setAnimationIntensity(trippy.animationIntensity);
+          setVfxTargets(trippy.targets);
+        } else if (active && (activeM === 'prism' || activeM === 'gradient')) {
           setMode(activeM);
           setAnimated(active.animated ?? false);
           setHue(active.hue);
@@ -174,12 +219,18 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     };
   }, [heroName]);
 
+  const applied = activeMode !== null;
+  useEffect(() => {
+    onAppliedChange?.(applied);
+  }, [applied, onAppliedChange]);
+
   // Live preview: render the real recolored ability texture, debounced so the
   // sliders stay smooth. Best-effort: if it can't render (no game path, old
   // binary) we silently fall back to the approximate CSS swatch.
   useEffect(() => {
-    // Prism / gradient have no per-pixel swatch to bake; they show a CSS chip instead.
-    if (!supported || busy || previewUnavailable || mode !== 'hue') return;
+    // Prism / gradient / trippy have no per-pixel swatch to bake; they show a
+    // CSS chip or the live pattern sprite instead.
+    if (loading || busy || previewUnavailable || mode !== 'hue') return;
     let cancelled = false;
     setPreviewLoading(true);
     const handle = setTimeout(() => {
@@ -204,7 +255,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [heroName, hue, saturation, brightness, supported, busy, previewUnavailable, mode]);
+  }, [heroName, hue, saturation, brightness, loading, busy, previewUnavailable, mode]);
 
   const refreshGameRunning = async () => {
     try {
@@ -219,11 +270,24 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     setBusy(true);
     setActionError(null);
     try {
-      if (mode === 'prism' || mode === 'gradient') {
+      if (mode === 'trippy') {
+        const result = await applyTrippyVfx(heroName, {
+          style: trippyStyle,
+          intensity: trippyIntensity,
+          phase: trippyPhase,
+          animationStyle,
+          animationIntensity,
+          targets: vfxTargets,
+        });
+        if (!mounted.current) return;
+        setActiveMode('trippy');
+        setActiveTrippy(result);
+      } else if (mode === 'prism' || mode === 'gradient') {
         const grad = mode === 'gradient' ? gradientSpecOf(gradientPreset, customStops) : null;
         const result = await applyHeroPrism(heroName, hue, saturation, brightness, animated, grad);
         if (!mounted.current) return;
         setActiveMode(mode);
+        setActiveTrippy(null);
         setActiveHue(result.hue);
         setActiveSaturation(result.saturation);
         setActiveBrightness(result.brightness);
@@ -233,6 +297,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
         const result = await applyHeroColor(heroName, hue, saturation, brightness);
         if (!mounted.current) return;
         setActiveMode('hue');
+        setActiveTrippy(null);
         setActiveHue(result.hue);
         setActiveSaturation(result.saturation);
         setActiveBrightness(result.brightness);
@@ -259,6 +324,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       setActiveBrightness(null);
       setActiveAnimated(false);
       setActiveGradient(null);
+      setActiveTrippy(null);
       setChanged(true);
       await refreshGameRunning();
     } catch (err) {
@@ -274,7 +340,6 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     setBrightness(p.brightness);
   };
 
-  const applied = activeMode !== null;
   const gradientSpec = gradientSpecOf(gradientPreset, customStops);
   const gradientStops = selectedGradientStops(gradientPreset, customStops);
   const gradientLabel =
@@ -287,94 +352,191 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     activeSaturation !== saturation ||
     activeBrightness !== brightness;
   const dirty =
-    mode === 'gradient'
-      ? activeMode !== 'gradient' || activeGradient !== gradientSpec || spectrumDirty
-      : mode === 'prism'
-        ? activeMode !== 'prism' || spectrumDirty
-        : activeMode !== 'hue' ||
-          activeHue !== hue ||
-          activeSaturation !== saturation ||
-          activeBrightness !== brightness;
+    mode === 'trippy'
+      ? !activeTrippy ||
+        activeTrippy.style !== trippyStyle ||
+        activeTrippy.intensity !== q(trippyIntensity) ||
+        activeTrippy.phase !== q(trippyPhase) ||
+        activeTrippy.animationStyle !== animationStyle ||
+        activeTrippy.animationIntensity !== q(animationIntensity) ||
+        activeTrippy.targets !== vfxTargets
+      : mode === 'gradient'
+        ? activeMode !== 'gradient' || activeGradient !== gradientSpec || spectrumDirty
+        : mode === 'prism'
+          ? activeMode !== 'prism' || spectrumDirty
+          : activeMode !== 'hue' ||
+            activeHue !== hue ||
+            activeSaturation !== saturation ||
+            activeBrightness !== brightness;
+
+  const appliedLabel = !applied
+    ? null
+    : activeMode === 'prism'
+      ? `Applied: Rainbow${activeAnimated ? ' (animated)' : ''} · rot ${activeHue ?? 0}°`
+      : activeMode === 'gradient'
+        ? `Applied: ${activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient) ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ?? 'Gradient') : 'Custom'} gradient${activeAnimated ? ' (animated)' : ''}`
+        : activeMode === 'trippy'
+          ? `Applied: Trippy ${activeTrippy ? TRIPPY_STYLE_LABELS[activeTrippy.style] : ''} · ${activeTrippy ? ANIMATION_LABELS[activeTrippy.animationStyle] : ''} · ${activeTrippy?.targets ?? ''}`
+          : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`;
 
   const swatchCss = approxSwatch(hue, saturation, brightness);
 
+  const modeBtn = (selected: boolean) =>
+    `flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
+      selected
+        ? 'border border-accent/40 bg-accent/10 text-text-primary'
+        : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+    }`;
+
+  const segBtn = (selected: boolean) =>
+    `rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+      selected
+        ? 'border border-accent/40 bg-accent/10 text-text-primary'
+        : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+    }`;
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-start gap-2 py-2 text-xs text-red-400">
+        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <span className="break-words">{error}</span>
+      </div>
+    );
+  }
+
   return (
-    <section className="space-y-3 border-t border-border/60 pt-5">
-      <div className="flex items-center gap-2">
-        <Palette className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Ability Color</h3>
-        <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-          Experimental
-        </span>
+    <div className="space-y-3">
+      <p className="text-xs text-text-secondary">
+        Repaint {heroName}&apos;s ability effects (particles, projectiles, and the ult body). Pick
+        a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.
+      </p>
+
+      {/* Mode toggle: four looks over the same one-per-hero slot. */}
+      <div className="inline-flex flex-wrap rounded-md border border-border p-0.5 text-xs">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setMode('hue')}
+          className={modeBtn(mode === 'hue')}
+        >
+          <Palette className="h-3.5 w-3.5" /> Single Color
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setMode('prism')}
+          className={modeBtn(mode === 'prism')}
+        >
+          <Sparkles className="h-3.5 w-3.5" /> Rainbow
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setMode('gradient')}
+          className={modeBtn(mode === 'gradient')}
+        >
+          <Blend className="h-3.5 w-3.5" /> Gradient
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setMode('trippy')}
+          className={modeBtn(mode === 'trippy')}
+        >
+          <Wand2 className="h-3.5 w-3.5" /> Trippy
+        </button>
       </div>
 
-      {loading && (
-        <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading...
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-start gap-2 py-2 text-xs text-red-400">
-          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <span className="break-words">{error}</span>
-        </div>
-      )}
-
-      {!loading && !error && supported === false && (
-        <p className="text-xs text-text-secondary">
-          Ability color recolor isn&apos;t available for {heroName} yet. It&apos;s currently
-          supported for Paige; more heroes are coming.
-        </p>
-      )}
-
-      {!loading && !error && supported && (
+      {mode === 'trippy' ? (
         <>
-          <p className="text-xs text-text-secondary">
-            Recolor {heroName}&apos;s ability effects (particles, projectiles, and the ult body).
-            Pick a single color, a rainbow, or spread the VFX over a gradient.
-          </p>
+          <TrippyPatternPicker
+            style={trippyStyle}
+            intensity={trippyIntensity}
+            phase={trippyPhase}
+            loopScroll={animationIntensity}
+            busy={busy}
+            summary={
+              <>
+                {TRIPPY_STYLE_LABELS[trippyStyle]}
+                <span className="text-text-secondary">
+                  {' '}
+                  · {pct(trippyIntensity)}% · {ANIMATION_LABELS[animationStyle]}{' '}
+                  {pct(animationIntensity)}%
+                </span>
+              </>
+            }
+            status={!applied ? 'No recolor applied' : !dirty ? 'Applied' : appliedLabel}
+            onStyle={setTrippyStyle}
+            onIntensity={setTrippyIntensity}
+            onPhase={setTrippyPhase}
+          />
 
-          {/* Mode toggle: a single picked color vs the rainbow prism. */}
-          <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setMode('hue')}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
-                mode === 'hue'
-                  ? 'border border-accent/40 bg-accent/10 text-text-primary'
-                  : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-              }`}
-            >
-              <Palette className="h-3.5 w-3.5" /> Single Color
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setMode('prism')}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
-                mode === 'prism'
-                  ? 'border border-accent/40 bg-accent/10 text-text-primary'
-                  : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5" /> Rainbow
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setMode('gradient')}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
-                mode === 'gradient'
-                  ? 'border border-accent/40 bg-accent/10 text-text-primary'
-                  : 'border border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-              }`}
-            >
-              <Blend className="h-3.5 w-3.5" /> Gradient
-            </button>
+          {/* Particle animation depth + strength. */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-text-secondary">Animation</span>
+            <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
+              {TRIPPY_ANIMATION_STYLES.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setAnimationStyle(a)}
+                  className={segBtn(animationStyle === a)}
+                >
+                  {ANIMATION_LABELS[a]}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {animationStyle !== 'off' && (
+            <label className="block space-y-1">
+              <span className="text-[11px] font-medium text-text-secondary">
+                Animation intensity{' '}
+                <span className="tabular-nums text-text-secondary/70">
+                  {pct(animationIntensity)}%
+                </span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={300}
+                step={10}
+                value={pct(animationIntensity)}
+                disabled={busy}
+                onChange={(e) => setAnimationIntensity(Number(e.target.value) / 100)}
+                className="h-3 w-full cursor-pointer appearance-none rounded-full bg-bg-tertiary disabled:cursor-not-allowed"
+              />
+            </label>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-medium text-text-secondary">Paint</span>
+            <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
+              {(['all', 'abilities', 'weapons'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setVfxTargets(t)}
+                  className={segBtn(vfxTargets === t)}
+                >
+                  {t === 'all' ? 'All' : t === 'abilities' ? 'Abilities' : 'Weapon FX'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
           {/* Live recolored preview + current target */}
           <div className="flex items-center gap-3">
             <div
@@ -417,17 +579,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
                     : `${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`}
               </div>
               <div className="text-[11px] text-text-secondary">
-                {!applied
-                  ? 'No color applied'
-                  : !dirty
-                    ? 'Applied'
-                    : activeMode === 'prism'
-                      ? `Applied: Rainbow${activeAnimated ? ' (animated)' : ''} · rot ${activeHue ?? 0}°`
-                      : activeMode === 'gradient'
-                        ? `Applied: ${activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient) ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ?? 'Gradient') : 'Custom'} gradient${activeAnimated ? ' (animated)' : ''}`
-                        : activeMode === 'trippy'
-                          ? 'Applied: Trippy VFX (see the Effects tab)'
-                          : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`}
+                {!applied ? 'No recolor applied' : !dirty ? 'Applied' : appliedLabel}
               </div>
             </div>
           </div>
@@ -457,7 +609,8 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
           {/* Saturation slider: gray -> full chroma at the current hue */}
           <label className="block space-y-1">
             <span className="text-[11px] font-medium text-text-secondary">
-              Saturation <span className="tabular-nums text-text-secondary/70">{pct(saturation)}%</span>
+              Saturation{' '}
+              <span className="tabular-nums text-text-secondary/70">{pct(saturation)}%</span>
             </span>
             <input
               type="range"
@@ -477,7 +630,8 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
           {/* Brightness slider: dark -> light at the current hue */}
           <label className="block space-y-1">
             <span className="text-[11px] font-medium text-text-secondary">
-              Brightness <span className="tabular-nums text-text-secondary/70">{pct(brightness)}%</span>
+              Brightness{' '}
+              <span className="tabular-nums text-text-secondary/70">{pct(brightness)}%</span>
             </span>
             <input
               type="range"
@@ -496,26 +650,26 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
 
           {/* Preset colors (single-color mode only; each sets hue + saturation + brightness) */}
           {mode === 'hue' && (
-          <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => {
-              const selected =
-                hue === p.hue && saturation === p.saturation && brightness === p.brightness;
-              return (
-                <button
-                  key={p.label}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => applyPreset(p)}
-                  title={`${p.label} (${p.hue}°, S ${pct(p.saturation)}%, B ${pct(p.brightness)}%)`}
-                  className={`h-6 w-6 rounded-full border transition-transform hover:scale-110 disabled:cursor-not-allowed ${
-                    selected ? 'border-text-primary ring-2 ring-accent/60' : 'border-border'
-                  }`}
-                  style={{ backgroundColor: approxSwatch(p.hue, p.saturation, p.brightness) }}
-                  aria-label={p.label}
-                />
-              );
-            })}
-          </div>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESETS.map((p) => {
+                const selected =
+                  hue === p.hue && saturation === p.saturation && brightness === p.brightness;
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => applyPreset(p)}
+                    title={`${p.label} (${p.hue}°, S ${pct(p.saturation)}%, B ${pct(p.brightness)}%)`}
+                    className={`h-6 w-6 rounded-full border transition-transform hover:scale-110 disabled:cursor-not-allowed ${
+                      selected ? 'border-text-primary ring-2 ring-accent/60' : 'border-border'
+                    }`}
+                    style={{ backgroundColor: approxSwatch(p.hue, p.saturation, p.brightness) }}
+                    aria-label={p.label}
+                  />
+                );
+              })}
+            </div>
           )}
 
           {mode === 'prism' && (
@@ -625,73 +779,72 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
               </p>
             </div>
           )}
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={busy || !dirty}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-              {applied && !dirty
-                ? 'Applied'
-                : mode === 'prism'
-                  ? 'Apply Rainbow'
-                  : mode === 'gradient'
-                    ? 'Apply Gradient'
-                    : 'Apply Color'}
-            </button>
-            {applied && (
-              <button
-                type="button"
-                onClick={handleRemove}
-                disabled={busy}
-                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Remove
-              </button>
-            )}
-          </div>
-
-          {busy && (
-            <p className="text-[11px] text-text-secondary/80">
-              Baking the recolor. The first time for a given color can take up to a minute (it
-              re-encodes every effect texture); the same color is instant after that.
-            </p>
-          )}
-
-          {actionError && (
-            <div className="flex items-start gap-2 py-1 text-xs text-red-400">
-              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-              <span className="break-words">{actionError}</span>
-            </div>
-          )}
-
-          {changed && (
-            <div
-              className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
-                gameRunning
-                  ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                  : 'border-border bg-bg-secondary/70 text-text-secondary'
-              }`}
-            >
-              <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              <span>
-                {gameRunning
-                  ? 'Restart Deadlock for this color change to take effect (addons mount at game start).'
-                  : 'Saved. This color mounts the next time you Launch Modded.'}
-              </span>
-            </div>
-          )}
         </>
       )}
-    </section>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={handleApply}
+          disabled={busy || !dirty}
+          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          {applied && !dirty
+            ? 'Applied'
+            : mode === 'trippy'
+              ? 'Apply Trippy'
+              : mode === 'prism'
+                ? 'Apply Rainbow'
+                : mode === 'gradient'
+                  ? 'Apply Gradient'
+                  : 'Apply Color'}
+        </button>
+        {applied && (
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={busy}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Remove
+          </button>
+        )}
+      </div>
+
+      {busy && (
+        <p className="text-[11px] text-text-secondary/80">
+          Baking the {mode === 'trippy' ? 'paint' : 'recolor'}. The first time for a given pick can
+          take up to a minute (it re-encodes every effect texture); the same pick is instant after
+          that.
+        </p>
+      )}
+
+      {actionError && (
+        <div className="flex items-start gap-2 py-1 text-xs text-red-400">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+          <span className="break-words">{actionError}</span>
+        </div>
+      )}
+
+      {changed && (
+        <div
+          className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
+            gameRunning
+              ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+              : 'border-border bg-bg-secondary/70 text-text-secondary'
+          }`}
+        >
+          <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+          <span>
+            {gameRunning
+              ? 'Restart Deadlock for this change to take effect (addons mount at game start).'
+              : 'Saved. This pick mounts the next time you Launch Modded.'}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
