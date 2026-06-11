@@ -32,12 +32,15 @@ import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
 import { LOCKER_COLORS_KEY, lockerColorsVpkPath, ensureGrimoireConfigured } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
+import { TRIPPY_ANIMATION_STYLES, TRIPPY_STYLES } from '../../../src/types/mod';
 import type {
     ActiveHeroColor,
     ApplyHeroColorResult,
     ApplyHeroPrismResult,
+    ApplyTrippyVfxResult,
     LockerColorSelection,
     LockerColorsInfo,
+    TrippyVfxChoice,
 } from '../../../src/types/mod';
 
 /**
@@ -284,6 +287,90 @@ async function ensureHeroPrismBake(
     return cachePath;
 }
 
+/** Clamp/quantize a trippy VFX choice so the cache key is stable and the values
+ *  are safe to hand to the CLI. Unknown style/animation names fall back to the
+ *  defaults rather than throwing (persisted selections survive renames). */
+export function normalizeTrippyVfxChoice(choice: Partial<TrippyVfxChoice>): TrippyVfxChoice {
+    const style = TRIPPY_STYLES.includes(choice.style as (typeof TRIPPY_STYLES)[number])
+        ? (choice.style as TrippyVfxChoice['style'])
+        : 'confetti';
+    const animationStyle = TRIPPY_ANIMATION_STYLES.includes(
+        choice.animationStyle as (typeof TRIPPY_ANIMATION_STYLES)[number],
+    )
+        ? (choice.animationStyle as TrippyVfxChoice['animationStyle'])
+        : 'cycle';
+    const targets =
+        choice.targets === 'abilities' || choice.targets === 'weapons' ? choice.targets : 'all';
+    return {
+        style,
+        intensity: normalizeScale(choice.intensity ?? 1, { min: 0, max: 1 }),
+        phase: normalizeScale(choice.phase ?? 0, { min: 0, max: 1 }),
+        animationStyle,
+        animationIntensity: normalizeScale(choice.animationIntensity ?? 1, { min: 0, max: 3 }),
+        targets,
+    };
+}
+
+/** Cache path for one hero's baked trippy-VFX addon, keyed by the full
+ *  normalized choice + version (same discipline as the hue/prism caches; the
+ *  scales are encoded as integer percents so the filename stays dot-free). */
+function trippyVfxCachePath(codename: string, c: TrippyVfxChoice): string {
+    const dir = join(app.getPath('userData'), 'ability-colors');
+    const i = Math.round(c.intensity * 100);
+    const p = Math.round(c.phase * 100);
+    const ai = Math.round(c.animationIntensity * 100);
+    return join(
+        dir,
+        `${codename}_trippy_${c.style}_i${i}_p${p}_${c.animationStyle}_ai${ai}_${c.targets}_v${RECIPE_CACHE_VERSION}_dir.vpk`,
+    );
+}
+
+/**
+ * Ensure a hero's trippy-VFX addon exists in the cache, baking it via
+ * `vpkmerge trippy-vfx` (reading the base game VFX from pak01) if missing.
+ * Same temp-then-rename discipline as the hue/prism bakes.
+ */
+async function ensureHeroTrippyVfxBake(
+    pak01: string,
+    codename: string,
+    choice: TrippyVfxChoice,
+): Promise<string> {
+    const cachePath = trippyVfxCachePath(codename, choice);
+    if (existsSync(cachePath)) return cachePath;
+
+    const dir = join(app.getPath('userData'), 'ability-colors');
+    await fs.mkdir(dir, { recursive: true });
+    const tmp = join(dir, `.${codename}_trippy_${randomUUID()}_dir.vpk`);
+    try {
+        await runVpkmerge([
+            'trippy-vfx',
+            '--hero',
+            codename,
+            '--vpk',
+            pak01,
+            '--style',
+            choice.style,
+            '--intensity',
+            String(choice.intensity),
+            '--phase',
+            String(choice.phase),
+            '--animation-style',
+            choice.animationStyle,
+            '--animation-intensity',
+            String(choice.animationIntensity),
+            '--targets',
+            choice.targets,
+            '--encode-vpk',
+            tmp,
+        ]);
+        await verifyVpkOutput(tmp);
+        await fs.rename(tmp, cachePath);
+    } finally {
+        await fs.unlink(tmp).catch(() => {});
+    }
+    return cachePath;
+}
+
 interface RebuildResult {
     fileName: string | null;
 }
@@ -322,23 +409,29 @@ async function rebuildLockerColors(
     const caches: string[] = [];
     for (const sel of valid) {
         caches.push(
-            sel.mode === 'prism' || sel.mode === 'gradient'
-                ? await ensureHeroPrismBake(
+            sel.mode === 'trippy'
+                ? await ensureHeroTrippyVfxBake(
                       pak01,
                       sel.heroCodename,
-                      sel.hue,
-                      sel.saturation,
-                      sel.brightness,
-                      sel.animated ?? false,
-                      sel.mode === 'gradient' ? (sel.gradient ?? null) : null,
+                      normalizeTrippyVfxChoice(sel.trippy ?? {}),
                   )
-                : await ensureHeroColorBake(
-                      pak01,
-                      sel.heroCodename,
-                      sel.hue,
-                      sel.saturation,
-                      sel.brightness,
-                  ),
+                : sel.mode === 'prism' || sel.mode === 'gradient'
+                  ? await ensureHeroPrismBake(
+                        pak01,
+                        sel.heroCodename,
+                        sel.hue,
+                        sel.saturation,
+                        sel.brightness,
+                        sel.animated ?? false,
+                        sel.mode === 'gradient' ? (sel.gradient ?? null) : null,
+                    )
+                  : await ensureHeroColorBake(
+                        pak01,
+                        sel.heroCodename,
+                        sel.hue,
+                        sel.saturation,
+                        sel.brightness,
+                    ),
         );
     }
 
@@ -452,6 +545,45 @@ export async function applyHeroPrism(
     return { hue: normHue, saturation: normSat, brightness: normBright, animated, gradient: grad };
 }
 
+/**
+ * Apply a trippy procedural paint to hero X's ability VFX, replacing any prior
+ * color/prism/trippy for that hero. Trippy VFX patches the same particles as the
+ * other recolor modes, so it lives in the same one-selection-per-hero set; the
+ * bake is cached by the full normalized choice and folded into the colors VPK.
+ */
+export async function applyHeroTrippyVfx(
+    deadlockPath: string,
+    heroName: string,
+    choice: Partial<TrippyVfxChoice>,
+): Promise<ApplyTrippyVfxResult> {
+    vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
+    const codename = colorCodenameForHero(heroName);
+    if (!codename) {
+        throw new Error(`Trippy effects aren't available for ${heroName} yet.`);
+    }
+    ensureGrimoireConfigured(deadlockPath);
+
+    const normalized = normalizeTrippyVfxChoice(choice);
+    const current = currentColorSelections();
+    const next: LockerColorSelection[] = [
+        ...current.filter((s) => s.heroCodename !== codename),
+        {
+            heroName,
+            heroCodename: codename,
+            // hue/saturation/brightness are unused in trippy mode; keep the
+            // neutral values so older readers render something sensible.
+            hue: 0,
+            saturation: DEFAULT_SCALE,
+            brightness: DEFAULT_SCALE,
+            mode: 'trippy',
+            trippy: normalized,
+            addedAt: new Date().toISOString(),
+        },
+    ];
+    await rebuildLockerColors(deadlockPath, next);
+    return normalized;
+}
+
 /** Remove hero X's ability color, reverting its VFX to vanilla. */
 export async function revertHeroColor(
     deadlockPath: string,
@@ -482,6 +614,7 @@ export function getActiveHeroColor(heroName: string): ActiveHeroColor | null {
               mode: sel.mode ?? 'hue',
               animated: sel.animated ?? false,
               ...(sel.gradient ? { gradient: sel.gradient } : {}),
+              ...(sel.trippy ? { trippy: sel.trippy } : {}),
           }
         : null;
 }

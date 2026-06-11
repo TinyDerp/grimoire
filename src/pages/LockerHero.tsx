@@ -1,9 +1,19 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { ArrowLeft, Star, Music, Shirt, Images, Box, Loader2, Palette } from 'lucide-react';
+import {
+  ArrowLeft,
+  Star,
+  Music,
+  Shirt,
+  Images,
+  Box,
+  Loader2,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
-import HeroColorPicker from '../components/locker/HeroColorPicker';
+import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { Mod } from '../types/mod';
@@ -21,7 +31,7 @@ interface LockerHeroViewProps {
   skinList: Mod[];
   /** Sound-section mods mapped to this hero. Optional because the gallery
    *  view in `Locker.tsx` keeps the same prop surface and may not split sounds
-   *  out yet. Empty/undefined hides the Sounds toggle entirely. */
+   *  out yet. Empty/undefined hides the Sounds section entirely. */
   soundList?: Mod[];
   skinCount: number;
   isFavorite: boolean;
@@ -31,6 +41,8 @@ interface LockerHeroViewProps {
   onToggleVariant: (modId: string) => void | Promise<void>;
   hideNsfwPreviews?: boolean;
 }
+
+type SectionId = 'skins' | 'sounds' | 'cards' | 'effects';
 
 function poseSkinSelectionKey(mod: Mod): string {
   if (typeof mod.gameBananaId === 'number') {
@@ -60,7 +72,7 @@ export function LockerHeroView({
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
-  const [section, setSection] = useState<'skins' | 'sounds' | 'cards' | 'colors'>('skins');
+  const [section, setSection] = useState<SectionId>('skins');
   const [poseSkinSelection, setPoseSkinSelection] = useState<{
     heroId: number;
     key: string;
@@ -94,11 +106,25 @@ export function LockerHeroView({
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
-  const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
-  const activeList = activeSection === 'sounds' ? soundList : skinList;
+  const activeSection: SectionId = section === 'sounds' && !hasSounds ? 'skins' : section;
   // Group sound variants the same way skins are counted so the count matches
   // the gallery/list cards and the grouped rows rendered below.
   const soundCount = countLockerSkins(soundList);
+
+  // Section rows, formatted like the Global view's type selector: label +
+  // count, with empty sections disabled rather than hidden.
+  const sections: Array<{
+    id: SectionId;
+    label: string;
+    icon: LucideIcon;
+    count: number | null;
+    disabled?: boolean;
+  }> = [
+    { id: 'skins', label: 'Skins', icon: Shirt, count: skinCount },
+    { id: 'sounds', label: 'Sounds', icon: Music, count: soundCount, disabled: !hasSounds },
+    { id: 'cards', label: 'Cards', icon: Images, count: null },
+    { id: 'effects', label: 'Effects', icon: Sparkles, count: null },
+  ];
 
   const renderSrc =
     renderFallbackStep === 0
@@ -145,16 +171,53 @@ export function LockerHeroView({
     await onToggleVariant(modId);
   };
 
+  // Content-pane heading, Global-view style (section title + count). The Cards
+  // and Effects panels render their own headers, so they skip it.
+  const contentHeading =
+    activeSection === 'skins'
+      ? {
+          title: 'Skins',
+          count: skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins',
+        }
+      : activeSection === 'sounds'
+        ? {
+            title: 'Sounds',
+            count:
+              soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : 'No sounds',
+          }
+        : null;
+
+  const selectionPanel =
+    activeSection === 'cards' ? (
+      <HeroCardPicker heroName={hero.name} />
+    ) : activeSection === 'effects' ? (
+      <HeroEffectsPanel key={hero.name} heroName={hero.name} />
+    ) : activeSection === 'sounds' ? (
+      <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
+    ) : (
+      <HeroSkinsPanel
+        mods={skinList}
+        onSelect={handleSelect}
+        onToggleVariant={handleToggleVariant}
+        hideNsfwPreviews={hideNsfwPreviews}
+        categoryId={hero.id}
+        showDownloadable
+        heroName={hero.name}
+        emptyMessage="Download a skin for this hero to manage it here."
+        layout="cards"
+      />
+    );
+
   return (
     <div className="relative flex h-full overflow-hidden">
-      {/* Hero portrait — sits behind both panels so it can bleed through the
-          frosted-glass sidebar on the right side of the panel. The image is
-          sized to the window height with natural aspect ratio (h-full w-auto)
-          so wider viewports don't force object-cover to scale it up and chop
-          the head/feet off. Anchored to the right edge; whatever space is left
-          to the left of the image shows the solid bg-primary, which the
-          frosted overlay reads as a dark frosted panel — same look as if the
-          portrait extended that far. */}
+      {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
+          panel so it can bleed through the frosted-glass rail + selection
+          column. The image is sized to the window height with natural aspect
+          ratio (h-full w-auto) so wider viewports don't force object-cover to
+          scale it up and chop the head/feet off. Anchored to the right edge;
+          whatever space is left to the left of the image shows the solid
+          bg-primary, which the frosted overlay reads as a dark frosted panel:
+          same look as if the portrait extended that far. */}
       <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
         {view3d ? (
           <Suspense
@@ -189,8 +252,8 @@ export function LockerHeroView({
         )}
       </div>
 
-      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the preview
-          area; sits above the frosted panel so it's always clickable. */}
+      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the backdrop;
+          sits above the frosted panels so it's always clickable. */}
       <button
         type="button"
         onClick={() => setView3d((v) => !v)}
@@ -213,19 +276,20 @@ export function LockerHeroView({
           So as the lighter layers fade out first, the effective blur softens
           from "very heavy" through "medium" to "nothing" without ever
           dropping off a cliff. The container is intentionally much wider
-          than the sidebar (sidebar is 400/450px; container is ~720/800px)
-          so the gradient has runway to feather all the way to clear. */}
+          than the panels it backs (rail + selection is ~640/710px; container
+          is ~1000/1100px) so the gradient has runway to feather all the way
+          to clear. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[720px] xl:w-[800px]"
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
       >
         <div
           className="absolute inset-0"
           style={{
             backdropFilter: 'blur(48px) saturate(135%)',
             WebkitBackdropFilter: 'blur(48px) saturate(135%)',
-            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
-            maskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 42%, transparent 94%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 42%, transparent 94%)',
           }}
         />
         <div
@@ -233,8 +297,8 @@ export function LockerHeroView({
           style={{
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
-            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
-            maskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 32%, transparent 78%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 32%, transparent 78%)',
           }}
         />
         <div
@@ -242,162 +306,101 @@ export function LockerHeroView({
           style={{
             backdropFilter: 'blur(10px)',
             WebkitBackdropFilter: 'blur(10px)',
-            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
-            maskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 26%, transparent 60%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 26%, transparent 60%)',
           }}
         />
         <div
           className="absolute inset-0"
           style={{
             background:
-              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 40%, rgba(26,26,26,0.75) 58%, rgba(26,26,26,0.4) 74%, rgba(26,26,26,0.15) 87%, transparent 97%)',
           }}
         />
       </div>
 
-      {/* Left Panel - Skin Selection */}
-      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto scrollbar-glass bg-bg-secondary lg:bg-transparent animate-slide-in-left">
-        <div className="relative z-10 p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                isFavorite
-                  ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-                  : 'border-border/70 text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              <Star className="w-4 h-4" />
-              {isFavorite ? 'Favorite' : 'Save'}
-            </button>
-          </div>
-
-          {/* Hero Name */}
-          <div className="flex items-center gap-3">
-            {nameFailed ? (
-              <h1 className="text-2xl font-bold text-text-primary">{hero.name}</h1>
-            ) : (
-              <img
-                src={getHeroNamePath(hero.name)}
-                alt={hero.name}
-                className="h-8 w-auto object-contain"
-                onError={() => setNameFailed(true)}
-              />
-            )}
-            <span className="text-sm text-text-secondary">
-              {activeSection === 'cards'
-                ? 'Card art'
-                : activeSection === 'colors'
-                  ? 'Ability color'
-                  : activeSection === 'sounds'
-                    ? soundCount > 0
-                      ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
-                      : 'No sounds'
-                    : skinCount > 0
-                      ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
-                      : 'No skins'}
-            </span>
-          </div>
-
-          {/* Section toggle. Skins and Cards are always available; Sounds only
-              shows when this hero has at least one tagged Sound mod. */}
-          <div
-            role="tablist"
-            aria-label="Section"
-            className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+      {/* Left sidebar: hero identity + section nav, formatted like the Global
+          view's type selector (Back, title + count, full-width rows). Solid bg
+          below lg; transparent on lg so the feathered glass shows through. */}
+      <div className="relative z-10 flex w-[260px] flex-shrink-0 flex-col gap-6 overflow-y-auto scrollbar-glass bg-bg-secondary p-6 animate-slide-in-left lg:w-[300px] lg:bg-transparent xl:w-[340px]">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeSection === 'skins'}
-              onClick={() => setSection('skins')}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                activeSection === 'skins'
-                  ? 'bg-accent/15 text-text-primary border border-accent/40'
-                  : 'text-text-secondary hover:text-text-primary border border-transparent'
-              }`}
-            >
-              <Shirt className="w-3.5 h-3.5" />
-              Skins
-            </button>
-            {hasSounds && (
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
+              isFavorite
+                ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+                : 'border-border/70 text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <Star className="w-4 h-4" />
+            {isFavorite ? 'Favorite' : 'Save'}
+          </button>
+        </div>
+
+        {/* Hero Name */}
+        {nameFailed ? (
+          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            {hero.name}
+          </h2>
+        ) : (
+          <img
+            src={getHeroNamePath(hero.name)}
+            alt={hero.name}
+            className="h-8 w-auto self-start object-contain"
+            onError={() => setNameFailed(true)}
+          />
+        )}
+
+        <nav aria-label="Locker sections" className="flex flex-col gap-1.5">
+          {sections.map(({ id, label, icon: Icon, count, disabled }) => {
+            const isActive = activeSection === id;
+            return (
               <button
+                key={id}
                 type="button"
-                role="tab"
-                aria-selected={activeSection === 'sounds'}
-                onClick={() => setSection('sounds')}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                  activeSection === 'sounds'
-                    ? 'bg-accent/15 text-text-primary border border-accent/40'
-                    : 'text-text-secondary hover:text-text-primary border border-transparent'
+                disabled={disabled}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setSection(id)}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  disabled
+                    ? 'cursor-default border-transparent opacity-40'
+                    : isActive
+                      ? 'border-accent/60 bg-accent/15 cursor-pointer'
+                      : 'border-transparent hover:bg-white/10 cursor-pointer'
                 }`}
               >
-                <Music className="w-3.5 h-3.5" />
-                Sounds
+                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
+                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
+                {count !== null && <span className="text-xs text-white/50">{count}</span>}
               </button>
-            )}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeSection === 'cards'}
-              onClick={() => setSection('cards')}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                activeSection === 'cards'
-                  ? 'bg-accent/15 text-text-primary border border-accent/40'
-                  : 'text-text-secondary hover:text-text-primary border border-transparent'
-              }`}
-            >
-              <Images className="w-3.5 h-3.5" />
-              Cards
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeSection === 'colors'}
-              onClick={() => setSection('colors')}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                activeSection === 'colors'
-                  ? 'bg-accent/15 text-text-primary border border-accent/40'
-                  : 'text-text-secondary hover:text-text-primary border border-transparent'
-              }`}
-            >
-              <Palette className="w-3.5 h-3.5" />
-              Colors
-            </button>
-          </div>
+            );
+          })}
+        </nav>
+      </div>
 
-          {/* Skin / Sound / Card / Color selection */}
-          <div className="space-y-4">
-            {activeSection === 'cards' ? (
-              <HeroCardPicker heroName={hero.name} />
-            ) : activeSection === 'colors' ? (
-              <HeroColorPicker heroName={hero.name} />
-            ) : activeSection === 'sounds' ? (
-              <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
-            ) : (
-            <HeroSkinsPanel
-              mods={activeList}
-              onSelect={handleSelect}
-              onToggleVariant={handleToggleVariant}
-              hideNsfwPreviews={hideNsfwPreviews}
-              categoryId={hero.id}
-              showDownloadable={activeSection === 'skins'}
-              heroName={hero.name}
-              emptyMessage="Download a skin for this hero to manage it here."
-            />
-            )}
-          </div>
-
+      {/* Right pane: the active section's content. Width-capped on lg+ so the
+          hero stays visible to its right (unlike the Global view, the backdrop
+          here IS the subject, not scenery to overlay). */}
+      <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass bg-bg-primary lg:flex-none lg:w-[480px] lg:bg-transparent xl:w-[540px]">
+        <div className="space-y-4 p-6">
+          {contentHeading && (
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+                {contentHeading.title}
+              </h3>
+              <span className="text-xs text-white/60">{contentHeading.count}</span>
+            </div>
+          )}
+          {selectionPanel}
         </div>
       </div>
     </div>

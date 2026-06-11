@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
 import type {
   HeroPortrait,
   HeroPoseInfo,
@@ -250,6 +250,38 @@ export async function revertHeroColor(heroName: string): Promise<ApplyHeroColorR
 
 export async function getActiveHeroColor(heroName: string): Promise<ActiveHeroColor | null> {
   return window.electronAPI.getActiveHeroColor(heroName);
+}
+
+/** Render (or fetch from cache) one animated trippy preview sprite: a PNG strip
+ *  of `frames` tiles played as a flipbook. Pure pattern generation in the
+ *  bundled vpkmerge; hero-independent and cheap (no VPK read). */
+export async function previewTrippySprite(opts: TrippySpriteOptions): Promise<TrippySpriteResult> {
+  return window.electronAPI.previewTrippySprite(opts);
+}
+
+/** Paint a hero's body/weapon materials with a procedural trippy pattern. */
+export async function applyTrippySkin(
+  heroName: string,
+  paint: Partial<ActiveTrippySkin>
+): Promise<ApplyTrippySkinResult> {
+  return window.electronAPI.applyTrippySkin(heroName, paint);
+}
+
+export async function revertTrippySkin(heroName: string): Promise<ApplyTrippySkinResult> {
+  return window.electronAPI.revertTrippySkin(heroName);
+}
+
+export async function getActiveTrippySkin(heroName: string): Promise<ActiveTrippySkin | null> {
+  return window.electronAPI.getActiveTrippySkin(heroName);
+}
+
+/** Paint + animate a hero's ability VFX with a procedural trippy theme. Lands
+ *  in the same one-recolor-per-hero set as applyHeroColor/applyHeroPrism. */
+export async function applyTrippyVfx(
+  heroName: string,
+  choice: Partial<TrippyVfxChoice>
+): Promise<ApplyTrippyVfxResult> {
+  return window.electronAPI.applyTrippyVfx(heroName, choice);
 }
 
 export async function getLockerOverview(): Promise<LockerOverview> {
