@@ -16,6 +16,7 @@ Mod manager and companion tool for Deadlock (Valve hero shooter). Electron deskt
 - **Portable Profile Export/Import** - share profiles via `mp1:` share codes or `.modprofile.json` files (Grimoire-only format; see `docs/profile-spec.md`)
 - **Conflict Detection** - identify overlapping file paths between mods
 - **Player Stats** - MMR tracking, match history, hero stats, leaderboards (via deadlock-api.com)
+- **Deadworks Server Browser** - browse/join community dedicated servers; auto-downloads required map/addon content before connecting (gated behind `experimentalDeadworksServers`; see `docs/deadworks-servers.md`)
 - **Auto-Update** - GitHub releases integration
 
 ## Tech Stack
@@ -96,6 +97,7 @@ Design docs and references live in `docs/`:
 - `design-overhaul-brief.md` - UI design language reference
 - `social-architecture.md` + `social-architecture-decisions.md` - Architecture and ADRs for the planned `grimoire-social` companion service (see below)
 - `ability-vfx-recolor.md` - Hero ability VFX layer extraction + in app recoloring. Read before touching `detectVfxLayer`/`extractVfxLayer` (in `vpk.ts`/`modMerger.ts`) or building the recolor/Locker surface. Covers why particle recolor must use an in place scalar patch, not a KV3 re-encode.
+- `deadworks-servers.md` - The Deadworks server browser: relay data flow, content provisioning, and (critically) how the deadworks content path is woven into grimoire's canonical `gameinfo.gi` block so Fix Configuration never erases it. Read before touching `deadworksServers.ts`, `ipc/servers.ts`, or the gameinfo handling in `system.ts`/`deadlock.ts`.
 
 ## Companion Service: grimoire-social
 

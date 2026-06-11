@@ -1254,6 +1254,15 @@ export default function Settings() {
               label="Fix Unknown Mods"
               description="Auto-match unknown local VPKs against GameBanana to recover their names and thumbnails. Currently hits rate limits on larger libraries while we rework it. The manual Custom Mod path stays available either way."
             />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalDeadworksServers ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalDeadworksServers: checked })}
+              label="Deadworks Servers"
+              description="Browse and join Deadworks community dedicated servers from a Servers tab. Required map/addon content is downloaded automatically before connecting."
+            />
           </div>
         </Card>
 

@@ -47,6 +47,7 @@ import type {
     SyncProgressData,
     UpdateStatus,
 } from '../../src/types/electron';
+import type { DeadworksConnectProgress } from '../../src/types/deadworks';
 import type {
     ProfileSort,
     PublishRequest,
@@ -555,5 +556,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // Utility
         checkApiHealth: () => ipcRenderer.invoke('stats:checkApiHealth'),
         getApiInfo: () => ipcRenderer.invoke('stats:getApiInfo'),
+    },
+
+    // Deadworks custom-server browser
+    deadworksGetRelayUrl: () => ipcRenderer.invoke('deadworks-get-relay-url'),
+    deadworksListServers: () => ipcRenderer.invoke('deadworks-list-servers'),
+    deadworksServerContent: (serverId: string) => ipcRenderer.invoke('deadworks-server-content', serverId),
+    deadworksRelayStats: () => ipcRenderer.invoke('deadworks-relay-stats'),
+    deadworksPingServer: (addr: string) => ipcRenderer.invoke('deadworks-ping-server', addr),
+    deadworksConnect: (serverId: string, addr: string) => ipcRenderer.invoke('deadworks-connect', serverId, addr),
+    onDeadworksDownloadProgress: (callback: (p: DeadworksConnectProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, p: DeadworksConnectProgress) => callback(p);
+        ipcRenderer.on('deadworks-download-progress', handler);
+        return () => ipcRenderer.removeListener('deadworks-download-progress', handler);
     },
 } satisfies ElectronAPI);

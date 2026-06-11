@@ -733,3 +733,50 @@ export function socialOnSessionChanged(
 ): () => void {
   return window.electronAPI.social.onSessionChanged(callback);
 }
+
+// ── Deadworks custom-server browser ──
+import type {
+  DeadworksServer,
+  DeadworksContentItem,
+  DeadworksConnectResult,
+  DeadworksConnectProgress,
+  DeadworksRelayStats,
+} from '../types/deadworks';
+
+export type {
+  DeadworksServer,
+  DeadworksContentItem,
+  DeadworksConnectResult,
+  DeadworksConnectProgress,
+  DeadworksRelayStats,
+};
+
+export async function deadworksGetRelayUrl(): Promise<string> {
+  return window.electronAPI.deadworksGetRelayUrl();
+}
+
+export async function deadworksListServers(): Promise<DeadworksServer[]> {
+  return window.electronAPI.deadworksListServers();
+}
+
+export async function deadworksServerContent(serverId: string): Promise<DeadworksContentItem[]> {
+  return window.electronAPI.deadworksServerContent(serverId);
+}
+
+export async function deadworksRelayStats(): Promise<DeadworksRelayStats | null> {
+  return window.electronAPI.deadworksRelayStats();
+}
+
+export async function deadworksPingServer(addr: string): Promise<number> {
+  return window.electronAPI.deadworksPingServer(addr);
+}
+
+export async function deadworksConnect(serverId: string, addr: string): Promise<DeadworksConnectResult> {
+  return window.electronAPI.deadworksConnect(serverId, addr);
+}
+
+export function deadworksOnDownloadProgress(
+  callback: (p: DeadworksConnectProgress) => void
+): () => void {
+  return window.electronAPI.onDeadworksDownloadProgress(callback);
+}

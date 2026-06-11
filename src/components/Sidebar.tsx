@@ -5,6 +5,7 @@ import {
   Boxes,
   Compass,
   Globe2,
+  Server,
   Vault,
   Target,
   ScrollText,
@@ -487,7 +488,7 @@ export default function Sidebar() {
       icon: typeof Boxes;
       label: string;
       tooltip: string;
-      experimental?: 'crosshair' | 'stats' | 'social';
+      experimental?: 'crosshair' | 'stats' | 'social' | 'servers';
       tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
@@ -506,6 +507,7 @@ export default function Sidebar() {
         badge: discoverNotificationCount,
         badgeTone: 'info',
       },
+      { to: '/servers', icon: Server, label: t('nav.servers'), tooltip: t('sidebar.tooltip.servers'), experimental: 'servers' },
       { to: '/locker', icon: Vault, label: t('nav.locker'), tooltip: t('sidebar.tooltip.locker') },
       { to: '/crosshair', icon: Target, label: t('nav.crosshair'), tooltip: t('sidebar.tooltip.crosshair'), experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
@@ -518,9 +520,10 @@ export default function Sidebar() {
       if (item.experimental === 'stats') return settings?.experimentalStats;
       if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
       if (item.experimental === 'social') return settings?.experimentalSocial;
+      if (item.experimental === 'servers') return settings?.experimentalDeadworksServers;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, conflictCount, discoverNotificationCount, installedCount]);
 
   const activeNavIndex = useMemo(
     () =>
