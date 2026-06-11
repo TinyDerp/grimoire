@@ -22,6 +22,12 @@ import type {
     ActiveHeroColor,
     ApplyHeroColorResult,
     ApplyHeroPrismResult,
+    ActiveTrippySkin,
+    ApplyTrippySkinResult,
+    ApplyTrippyVfxResult,
+    TrippySpriteOptions,
+    TrippySpriteResult,
+    TrippyVfxChoice,
     LockerOverview,
     LockerCardThumbnail,
     LockerClearScope,
@@ -390,6 +396,17 @@ export interface ElectronAPI {
     ) => Promise<string>;
     revertHeroColor: (heroName: string) => Promise<ApplyHeroColorResult>;
     getActiveHeroColor: (heroName: string) => Promise<ActiveHeroColor | null>;
+    previewTrippySprite: (opts: TrippySpriteOptions) => Promise<TrippySpriteResult>;
+    applyTrippySkin: (
+        heroName: string,
+        paint: Partial<ActiveTrippySkin>,
+    ) => Promise<ApplyTrippySkinResult>;
+    revertTrippySkin: (heroName: string) => Promise<ApplyTrippySkinResult>;
+    getActiveTrippySkin: (heroName: string) => Promise<ActiveTrippySkin | null>;
+    applyTrippyVfx: (
+        heroName: string,
+        choice: Partial<TrippyVfxChoice>,
+    ) => Promise<ApplyTrippyVfxResult>;
     getLockerOverview: () => Promise<LockerOverview>;
     getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
     clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;

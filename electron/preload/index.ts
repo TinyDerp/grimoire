@@ -8,6 +8,7 @@ import type { SocialSessionStatus } from '../../src/types/social';
 import type {
     AbilitySlot,
     AbilitySoundParams,
+    ActiveTrippySkin,
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
@@ -16,6 +17,8 @@ import type {
     EditLocalModArgs,
     LockerClearScope,
     MergeModsArgs,
+    TrippySpriteOptions,
+    TrippyVfxChoice,
     UnknownModDetectionProgress,
 } from '../../src/types/mod';
 // The single source of truth for the renderer-facing API surface. The api
@@ -158,6 +161,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-color', heroName),
     getActiveHeroColor: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-color', heroName),
+    previewTrippySprite: (opts: TrippySpriteOptions) =>
+        ipcRenderer.invoke('preview-trippy-sprite', opts),
+    applyTrippySkin: (heroName: string, paint: Partial<ActiveTrippySkin>) =>
+        ipcRenderer.invoke('apply-trippy-skin', heroName, paint),
+    revertTrippySkin: (heroName: string) =>
+        ipcRenderer.invoke('revert-trippy-skin', heroName),
+    getActiveTrippySkin: (heroName: string) =>
+        ipcRenderer.invoke('get-active-trippy-skin', heroName),
+    applyTrippyVfx: (heroName: string, choice: Partial<TrippyVfxChoice>) =>
+        ipcRenderer.invoke('apply-trippy-vfx', heroName, choice),
     getLockerOverview: () =>
         ipcRenderer.invoke('get-locker-overview'),
     getLockerCardThumbnails: () =>

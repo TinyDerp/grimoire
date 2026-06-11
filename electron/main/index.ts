@@ -78,6 +78,7 @@ import './ipc/diagnostics';
 import './ipc/portraits';
 import './ipc/abilitySounds';
 import './ipc/abilityColors';
+import './ipc/trippyEffects';
 import './ipc/locker';
 import './ipc/previewCache';
 import './ipc/discord';

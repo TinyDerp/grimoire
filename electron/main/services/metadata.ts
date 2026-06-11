@@ -64,6 +64,11 @@ export interface ModMetadata {
      *  marks the VPK as Locker-managed. Separate from lockerCosmetics/lockerSounds
      *  (disjoint paths, independent lifecycle). */
     lockerColors?: import('../../../src/types/mod').LockerColorsInfo;
+    /** Set on the single Locker-managed trippy-skins VPK that holds applied
+     *  procedural skin paints. The selection set; rebuilt on every apply/revert.
+     *  Presence marks the VPK as Locker-managed. Separate from lockerColors
+     *  (disjoint paths: body/weapon materials vs particles). */
+    lockerTrippySkins?: import('../../../src/types/mod').LockerTrippySkinsInfo;
     /** Per-ability sound classification from the VPK file tree. Tri-state like
      *  globalType: an AbilitySoundClassification when the mod has recognized
      *  hero ability/VO sounds, `null` when classified and it has none, and

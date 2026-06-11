@@ -31,11 +31,13 @@ import { readStash } from './launch';
 export const LOCKER_CARDS_KEY = 'locker:cards';
 export const LOCKER_SOUNDS_KEY = 'locker:sounds';
 export const LOCKER_COLORS_KEY = 'locker:colors';
+export const LOCKER_TRIPPY_SKINS_KEY = 'locker:trippyskins';
 
 /** Fixed filenames inside citadel/grimoire. */
 const GRIMOIRE_CARDS_FILE = 'pak01_dir.vpk';
 const GRIMOIRE_SOUNDS_FILE = 'pak02_dir.vpk';
 const GRIMOIRE_COLORS_FILE = 'pak03_dir.vpk';
+const GRIMOIRE_TRIPPY_SKINS_FILE = 'pak04_dir.vpk';
 
 /** Absolute path to the managed cards VPK in citadel/grimoire. */
 export function lockerCardsVpkPath(deadlockPath: string): string {
@@ -52,6 +54,12 @@ export function lockerSoundsVpkPath(deadlockPath: string): string {
  *  grimoire search path), so unlike cards/sounds it has no migration path. */
 export function lockerColorsVpkPath(deadlockPath: string): string {
     return join(getGrimoirePath(deadlockPath), GRIMOIRE_COLORS_FILE);
+}
+
+/** Absolute path to the managed trippy-skins VPK in citadel/grimoire. Like the
+ *  colors VPK it postdates the grimoire search path, so no migration path. */
+export function lockerTrippySkinsVpkPath(deadlockPath: string): string {
+    return join(getGrimoirePath(deadlockPath), GRIMOIRE_TRIPPY_SKINS_FILE);
 }
 
 /** Whether the grimoire search path (and addons) is active in gameinfo.gi. The

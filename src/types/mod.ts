@@ -178,10 +178,12 @@ export interface LockerOverview {
   sounds: LockerOverviewSound[];
   /** Applied ability-color recolors, one per hero (see LockerColorSelection). */
   colors: LockerColorSelection[];
+  /** Applied trippy skin paints, one per hero (see LockerTrippySkinSelection). */
+  trippySkins: LockerTrippySkinSelection[];
 }
 
 /** Which slice of Locker overrides to clear. */
-export type LockerClearScope = 'all' | 'cards' | 'sounds' | 'colors';
+export type LockerClearScope = 'all' | 'cards' | 'sounds' | 'colors' | 'trippy';
 
 /** One applied hero card decoded to a preview thumbnail, for the popup. Decoded
  *  on demand from the managed cosmetics VPK (the real applied art, not the
@@ -225,8 +227,10 @@ export interface LockerColorSelection {
   /** Recolor mode. 'hue' (or absent, for older persisted entries) = one absolute
    *  color via `recolor-hero`. 'prism' = a rainbow spectrum via `vpkmerge prism`.
    *  'gradient' = a prism spread over a custom gradient (see `gradient`). In
-   *  prism/gradient modes hue is a spectrum rotation, not an absolute color. */
-  mode?: 'hue' | 'prism' | 'gradient';
+   *  prism/gradient modes hue is a spectrum rotation, not an absolute color.
+   *  'trippy' = a procedural trippy VFX paint via `vpkmerge trippy-vfx` (see
+   *  `trippy`); hue/saturation/brightness are unused in that mode. */
+  mode?: 'hue' | 'prism' | 'gradient' | 'trippy';
   /** Prism/gradient only: animate the spectrum so it sweeps over each particle's
    *  lifetime (`prism --animated`). Ignored in hue mode. */
   animated?: boolean;
@@ -234,6 +238,8 @@ export interface LockerColorSelection {
    *  (fire/ice/toxic/sunset/ocean/neon/gold/void) or a stop list
    *  `pos:hue:sat,...`. */
   gradient?: string;
+  /** Trippy mode only: the procedural style/params for the VFX paint. */
+  trippy?: TrippyVfxChoice;
   addedAt: string;
 }
 
@@ -258,13 +264,16 @@ export interface ActiveHeroColor {
   saturation: number;
   /** Applied brightness scale (1 = source). */
   brightness: number;
-  /** Which recolor is applied: a single hue, the rainbow prism, or a custom
-   *  gradient. Absent on older persisted entries (treat as 'hue'). */
-  mode?: 'hue' | 'prism' | 'gradient';
+  /** Which recolor is applied: a single hue, the rainbow prism, a custom
+   *  gradient, or a trippy VFX paint. Absent on older persisted entries
+   *  (treat as 'hue'). */
+  mode?: 'hue' | 'prism' | 'gradient' | 'trippy';
   /** Prism/gradient only: whether the applied spectrum is animated. */
   animated?: boolean;
   /** Gradient mode only: the applied gradient spec (preset name or stop list). */
   gradient?: string;
+  /** Trippy mode only: the applied procedural style/params. */
+  trippy?: TrippyVfxChoice;
 }
 
 export interface ApplyHeroColorResult {
@@ -288,6 +297,123 @@ export interface ApplyHeroPrismResult {
   animated: boolean;
   /** The applied gradient spec, or null for the full rainbow. */
   gradient: string | null;
+}
+
+/** Procedural trippy pattern styles (vpkmerge trippy-skin / trippy-vfx /
+ *  trippy-preview). Shared by the main-process bake services and the Locker
+ *  Effects panel so the two never drift. */
+export const TRIPPY_STYLES = [
+  'confetti',
+  'liquid',
+  'moire',
+  'kaleido',
+  'holo',
+  'glitch',
+  'thermal',
+  'gradient',
+] as const;
+export type TrippyStyleName = (typeof TRIPPY_STYLES)[number];
+
+/** Particle animation depth for trippy VFX (vpkmerge `--animation-style`).
+ *  sweep retimes texture scroll, loop also loops color gradients, cycle also
+ *  inserts runtime color-cycle operators where safe. */
+export const TRIPPY_ANIMATION_STYLES = ['off', 'sweep', 'loop', 'cycle'] as const;
+export type TrippyAnimationStyle = (typeof TRIPPY_ANIMATION_STYLES)[number];
+
+/** Which materials a trippy SKIN paint touches. */
+export type TrippySkinTargets = 'all' | 'body' | 'weapons';
+/** Which effect sets a trippy VFX paint touches. */
+export type TrippyVfxTargets = 'all' | 'abilities' | 'weapons';
+
+/** Request for one animated trippy preview sprite (vpkmerge trippy-preview).
+ *  Pure pattern generation: hero-independent and cheap (no VPK read). */
+export interface TrippySpriteOptions {
+  style: TrippyStyleName;
+  /** Pattern phase / hue offset, normalized 0..1. */
+  phase: number;
+  /** UV-scroll speed scale; advances the phase across the frame loop so the
+   *  swatch loop speed mirrors the runtime scroll the bake would apply. */
+  scroll: number;
+  /** Pattern blend strength over the checkerboard base, 0..1. */
+  intensity: number;
+  /** Frames in the loop (clamped to 1..48 by the binary). */
+  frames: number;
+  /** Square tile size per frame in px (clamped to 16..512 by the binary). */
+  size: number;
+}
+
+/** One rendered trippy preview sprite: a PNG strip of `frames` tiles, each
+ *  `size` x `size`, laid out left to right. The renderer plays it as a flipbook. */
+export interface TrippySpriteResult {
+  dataUrl: string;
+  frames: number;
+  size: number;
+}
+
+/** The procedural style/params for a trippy ability-VFX paint. Lives inside a
+ *  LockerColorSelection (mode 'trippy'): trippy VFX patches the same particles
+ *  as recolor/prism, so it shares the one-selection-per-hero colors VPK and can
+ *  never stack with another recolor for the same hero. */
+export interface TrippyVfxChoice {
+  style: TrippyStyleName;
+  /** Texture blend / particle emphasis strength, 0..1. */
+  intensity: number;
+  /** Pattern phase / hue offset, normalized 0..1. */
+  phase: number;
+  animationStyle: TrippyAnimationStyle;
+  /** Particle animation strength (0..3; 0 behaves like animationStyle 'off'). */
+  animationIntensity: number;
+  targets: TrippyVfxTargets;
+}
+
+/** Result of applying a trippy VFX paint: the normalized choice as baked. */
+export type ApplyTrippyVfxResult = TrippyVfxChoice;
+
+/**
+ * One per-hero trippy SKIN paint inside the Locker trippy-skins VPK (pak04).
+ * Disjoint from ability colors: this repaints the hero's body/weapon material
+ * textures (models/heroes*), not particles, so it composes with an applied
+ * ability color or trippy VFX. At most one selection per hero.
+ */
+export interface LockerTrippySkinSelection {
+  heroName: string;
+  /** Model/material codename the paint targets (same table as ability colors). */
+  heroCodename: string;
+  style: TrippyStyleName;
+  /** Texture blend strength, 0..1 (0 = original texture). */
+  intensity: number;
+  /** Runtime VMAT UV-scroll speed scale (1 = reference speed). */
+  scroll: number;
+  /** Pattern phase / hue offset, normalized 0..1. */
+  phase: number;
+  targets: TrippySkinTargets;
+  addedAt: string;
+}
+
+/** Manifest on the Locker-managed trippy-skins VPK (mirrors LockerColorsInfo). */
+export interface LockerTrippySkinsInfo {
+  /** One entry per hero (heroCodename). */
+  skins: LockerTrippySkinSelection[];
+  rebuiltAt: string;
+}
+
+/** The trippy skin currently applied for a hero, read back so the Effects panel
+ *  can reflect the active selection. */
+export interface ActiveTrippySkin {
+  style: TrippyStyleName;
+  intensity: number;
+  scroll: number;
+  phase: number;
+  targets: TrippySkinTargets;
+}
+
+/** Result of applying/reverting a trippy skin: nulls after a revert. */
+export interface ApplyTrippySkinResult {
+  style: TrippyStyleName | null;
+  intensity: number | null;
+  scroll: number | null;
+  phase: number | null;
+  targets: TrippySkinTargets | null;
 }
 
 /**

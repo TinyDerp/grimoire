@@ -9,6 +9,7 @@ import {
     RotateCcw,
     RefreshCw,
     SlidersHorizontal,
+    Sparkles,
     ExternalLink,
     Loader2,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
     revertHeroCard,
     revertHeroSound,
     revertHeroColor,
+    revertTrippySkin,
     applyHeroSound,
     getGameRunningStatus,
 } from '../lib/api';
@@ -46,7 +48,16 @@ const PITCH_MAX = 2;
 /** Re-apply (rebuild the sound VPK) this long after the last slider move. */
 const PARAM_COMMIT_DELAY_MS = 600;
 
-type Tab = 'cards' | 'sounds' | 'colors';
+type Tab = 'cards' | 'sounds' | 'colors' | 'effects';
+
+/** The clear-all scope behind each tab ('effects' clears the trippy skins; an
+ *  applied trippy VFX lives in the colors set and clears with colors). */
+const CLEAR_SCOPE: Record<Tab, 'cards' | 'sounds' | 'colors' | 'trippy'> = {
+    cards: 'cards',
+    sounds: 'sounds',
+    colors: 'colors',
+    effects: 'trippy',
+};
 
 function abilityLabel(slot: AbilitySlot): string {
     return slot === 4 ? 'Ultimate' : `Ability ${slot}`;
@@ -235,6 +246,7 @@ export function LockerOverridesModal({
         if (overview.cards.length > 0) return;
         if (overview.sounds.length > 0) setTab('sounds');
         else if (overview.colors.length > 0) setTab('colors');
+        else if (overview.trippySkins.length > 0) setTab('effects');
     }, [overview]);
 
     // Decode the real applied card art whenever the applied-card SET changes
@@ -333,12 +345,26 @@ export function LockerOverridesModal({
         }
     };
 
+    const removeTrippySkin = async (heroName: string) => {
+        if (busy) return;
+        setRemoving(`trippy:${heroName}`);
+        setActionError(null);
+        try {
+            await revertTrippySkin(heroName);
+            await afterChange();
+        } catch (err) {
+            setActionError(String(err));
+        } finally {
+            setRemoving(null);
+        }
+    };
+
     const clearTab = async (which: Tab) => {
         if (busy) return;
         setClearing(which);
         setActionError(null);
         try {
-            await clearLockerOverrides(which);
+            await clearLockerOverrides(CLEAR_SCOPE[which]);
             await afterChange();
         } catch (err) {
             setActionError(String(err));
@@ -391,6 +417,7 @@ export function LockerOverridesModal({
     const cards = overview?.cards ?? [];
     const sounds = overview?.sounds ?? [];
     const colors = overview?.colors ?? [];
+    const trippySkins = overview?.trippySkins ?? [];
 
     return (
         <div
@@ -431,6 +458,7 @@ export function LockerOverridesModal({
                         { id: 'cards' as const, label: 'Hero Cards', icon: ImageIcon, count: cards.length },
                         { id: 'sounds' as const, label: 'Ability Sounds', icon: Volume2, count: sounds.length },
                         { id: 'colors' as const, label: 'Ability Colors', icon: Palette, count: colors.length },
+                        { id: 'effects' as const, label: 'Trippy Skins', icon: Sparkles, count: trippySkins.length },
                     ]).map(({ id, label, icon: Icon, count }) => (
                         <button
                             key={id}
@@ -646,7 +674,7 @@ export function LockerOverridesModal({
                                     // chip, the rainbow prism, or the chosen gradient ramp (sampled
                                     // the same way the engine bakes it).
                                     const swatchStyle =
-                                        mode === 'prism'
+                                        mode === 'prism' || mode === 'trippy'
                                             ? {
                                                   background: rainbowCss(
                                                       color.hue,
@@ -675,7 +703,9 @@ export function LockerOverridesModal({
                                             ? `Rainbow · rot ${Math.round(color.hue)}°`
                                             : mode === 'gradient'
                                               ? `${gradientLabelOf(color.gradient)} gradient · rot ${Math.round(color.hue)}°`
-                                              : `Hue ${Math.round(color.hue)}°`;
+                                              : mode === 'trippy'
+                                                ? `Trippy VFX · ${color.trippy?.style ?? 'confetti'} · ${color.trippy?.animationStyle ?? 'cycle'}`
+                                                : `Hue ${Math.round(color.hue)}°`;
                                     return (
                                         <div
                                             key={key}
@@ -715,6 +745,64 @@ export function LockerOverridesModal({
                             </div>
                         )
                     )}
+
+                    {tab === 'effects' && (
+                        trippySkins.length === 0 ? (
+                            <EmptyState
+                                kind="effects"
+                                onOpenLocker={() => {
+                                    onClose();
+                                    navigate('/locker');
+                                }}
+                            />
+                        ) : (
+                            <div className="space-y-3">
+                                {trippySkins.map((skin) => {
+                                    const key = `trippy:${skin.heroName}`;
+                                    const isRemoving = removing === key;
+                                    return (
+                                        <div
+                                            key={key}
+                                            className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-bg-tertiary/40 p-2.5"
+                                        >
+                                            <HeroIcon heroName={skin.heroName} />
+                                            <span
+                                                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-white/15"
+                                                style={{ background: rainbowCss(0, 1, 1) }}
+                                                aria-hidden
+                                            >
+                                                <Sparkles className="h-4 w-4 text-black/60" />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="truncate text-sm font-medium text-text-primary">
+                                                    {skin.heroName}
+                                                </div>
+                                                <div className="truncate text-xs text-text-secondary tabular-nums">
+                                                    {`${skin.style} · ${Math.round(skin.intensity * 100)}% · ${
+                                                        skin.targets === 'all'
+                                                            ? 'body + gun'
+                                                            : skin.targets === 'body'
+                                                              ? 'body'
+                                                              : 'gun'
+                                                    }`}
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                icon={isRemoving ? undefined : RotateCcw}
+                                                isLoading={isRemoving}
+                                                disabled={busy}
+                                                onClick={() => removeTrippySkin(skin.heroName)}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )
+                    )}
                 </div>
 
                 {/* Footer: per-tab clear-all + a link to add more in the Locker. */}
@@ -732,7 +820,8 @@ export function LockerOverridesModal({
                     </button>
                     {((tab === 'cards' && cards.length > 0) ||
                         (tab === 'sounds' && sounds.length > 0) ||
-                        (tab === 'colors' && colors.length > 0)) && (
+                        (tab === 'colors' && colors.length > 0) ||
+                        (tab === 'effects' && trippySkins.length > 0)) && (
                         <Button
                             variant="danger"
                             size="sm"
@@ -741,7 +830,14 @@ export function LockerOverridesModal({
                             disabled={busy}
                             onClick={() => clearTab(tab)}
                         >
-                            Remove all {tab === 'cards' ? 'cards' : tab === 'sounds' ? 'sounds' : 'colors'}
+                            Remove all{' '}
+                            {tab === 'cards'
+                                ? 'cards'
+                                : tab === 'sounds'
+                                  ? 'sounds'
+                                  : tab === 'colors'
+                                    ? 'colors'
+                                    : 'trippy skins'}
                         </Button>
                     )}
                 </div>
@@ -758,8 +854,16 @@ function EmptyState({
     kind: Tab;
     onOpenLocker: () => void;
 }) {
-    const Icon = kind === 'cards' ? ImageIcon : kind === 'sounds' ? Volume2 : Palette;
-    const noun = kind === 'cards' ? 'hero card' : kind === 'sounds' ? 'ability sound' : 'ability color';
+    const Icon =
+        kind === 'cards' ? ImageIcon : kind === 'sounds' ? Volume2 : kind === 'effects' ? Sparkles : Palette;
+    const noun =
+        kind === 'cards'
+            ? 'hero card'
+            : kind === 'sounds'
+              ? 'ability sound'
+              : kind === 'effects'
+                ? 'trippy skin'
+                : 'ability color';
     return (
         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Icon className="h-8 w-8 text-text-secondary/50" />

@@ -98,8 +98,12 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   // Gradient mode: the chosen preset name (or 'custom') and the custom editor stops.
   const [gradientPreset, setGradientPreset] = useState<string>(GRADIENT_PRESETS[0].name);
   const [customStops, setCustomStops] = useState<GStop[]>(DEFAULT_CUSTOM_STOPS);
-  // What's applied in-game: the mode (null = nothing), its animated flag, and gradient.
-  const [activeMode, setActiveMode] = useState<'hue' | 'prism' | 'gradient' | null>(null);
+  // What's applied in-game: the mode (null = nothing), its animated flag, and
+  // gradient. 'trippy' means the Effects tab owns this hero's VFX right now;
+  // applying a color here replaces it (one recolor per hero).
+  const [activeMode, setActiveMode] = useState<'hue' | 'prism' | 'gradient' | 'trippy' | null>(
+    null,
+  );
   const [activeAnimated, setActiveAnimated] = useState(false);
   const [activeGradient, setActiveGradient] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -421,7 +425,9 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
                       ? `Applied: Rainbow${activeAnimated ? ' (animated)' : ''} · rot ${activeHue ?? 0}°`
                       : activeMode === 'gradient'
                         ? `Applied: ${activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient) ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ?? 'Gradient') : 'Custom'} gradient${activeAnimated ? ' (animated)' : ''}`
-                        : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`}
+                        : activeMode === 'trippy'
+                          ? 'Applied: Trippy VFX (see the Effects tab)'
+                          : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`}
               </div>
             </div>
           </div>

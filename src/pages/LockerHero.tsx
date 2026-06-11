@@ -1,9 +1,10 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { ArrowLeft, Star, Music, Shirt, Images, Box, Loader2, Palette } from 'lucide-react';
+import { ArrowLeft, Star, Music, Shirt, Images, Box, Loader2, Palette, Sparkles } from 'lucide-react';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroColorPicker from '../components/locker/HeroColorPicker';
+import TrippyEffectsPanel from '../components/locker/TrippyEffectsPanel';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { Mod } from '../types/mod';
@@ -60,7 +61,9 @@ export function LockerHeroView({
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
-  const [section, setSection] = useState<'skins' | 'sounds' | 'cards' | 'colors'>('skins');
+  const [section, setSection] = useState<'skins' | 'sounds' | 'cards' | 'colors' | 'effects'>(
+    'skins'
+  );
   const [poseSkinSelection, setPoseSkinSelection] = useState<{
     heroId: number;
     key: string;
@@ -299,7 +302,9 @@ export function LockerHeroView({
                 ? 'Card art'
                 : activeSection === 'colors'
                   ? 'Ability color'
-                  : activeSection === 'sounds'
+                  : activeSection === 'effects'
+                    ? 'Trippy effects'
+                    : activeSection === 'sounds'
                     ? soundCount > 0
                       ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
                       : 'No sounds'
@@ -374,6 +379,20 @@ export function LockerHeroView({
               <Palette className="w-3.5 h-3.5" />
               Colors
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'effects'}
+              onClick={() => setSection('effects')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'effects'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Effects
+            </button>
           </div>
 
           {/* Skin / Sound / Card / Color selection */}
@@ -382,6 +401,8 @@ export function LockerHeroView({
               <HeroCardPicker heroName={hero.name} />
             ) : activeSection === 'colors' ? (
               <HeroColorPicker heroName={hero.name} />
+            ) : activeSection === 'effects' ? (
+              <TrippyEffectsPanel heroName={hero.name} />
             ) : activeSection === 'sounds' ? (
               <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
             ) : (
