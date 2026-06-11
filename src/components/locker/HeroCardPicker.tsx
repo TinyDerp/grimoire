@@ -165,14 +165,14 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 disabled={busySource !== null}
                 onClick={() => handlePick(group.modFileName)}
                 title={`${group.modFileName} · ${group.variants.length} portrait(s)`}
-                // Frosted-glass surface matching HeroSkinsPanel's card tokens so
-                // the Cards tab reads as a sibling of Skins. backdrop-blur on the
-                // resting state too (not just active) since these sit directly
-                // over the hero portrait.
-                className={`group relative block w-full overflow-hidden rounded-md border text-left backdrop-blur-sm transition-colors disabled:cursor-not-allowed ${
+                // Card tokens shared with the Skins grid / Global view so the
+                // Cards tab reads as a sibling of Skins: accent border + glow
+                // when applied, dim glass at rest. backdrop-blur on the resting
+                // state too since these sit directly over the hero portrait.
+                className={`group relative block w-full overflow-hidden rounded-[10px] border text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
                   isApplied
-                    ? 'border-accent/60 bg-white/[0.05] ring-1 ring-accent/30'
-                    : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
+                    ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
+                    : 'border-white/[0.08] bg-[#141414]/55 hover:border-white/[0.16]'
                 } ${busySource !== null && !isBusy ? 'opacity-60' : 'cursor-pointer'}`}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">

@@ -204,6 +204,7 @@ export function LockerHeroView({
         showDownloadable
         heroName={hero.name}
         emptyMessage="Download a skin for this hero to manage it here."
+        layout="cards"
       />
     );
 

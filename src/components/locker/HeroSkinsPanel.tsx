@@ -71,6 +71,322 @@ interface HeroSkinsPanelProps {
     label: string;
     onClick: () => void;
   };
+  /** 'list' (default): compact thumbnail rows, used by the Locker list view's
+   *  narrow inline expansion. 'cards': the 2-up media-card grid used by the
+   *  hero detail view, sharing the Global view's card language (glass backdrop
+   *  tinted by the cover art, accent glow when active, dim when not). */
+  layout?: 'list' | 'cards';
+}
+
+/** One skin group as a media card (hero detail view). The whole card is the
+ *  select control for single-variant groups; multi-variant groups select via
+ *  their footer pills instead, mirroring the list rows' behavior. */
+function SkinGroupCard({
+  group,
+  onSelect,
+  onToggleVariant,
+  hideNsfwPreviews,
+  useHeroPortraitThumbnails,
+  heroName,
+  soundVolume,
+}: {
+  group: SkinGroup;
+  onSelect: (modId: string) => void;
+  onToggleVariant?: (modId: string) => void;
+  hideNsfwPreviews: boolean;
+  useHeroPortraitThumbnails: boolean;
+  heroName?: string;
+  soundVolume: number;
+}) {
+  const isMulti = group.variants.length > 1;
+  const groupActive = group.variants.some((v) => v.enabled);
+  const enabledCount = group.variants.filter((v) => v.enabled).length;
+  const primary = group.primary;
+  // Skipped when NSFW previews are hidden so we never bleed hidden imagery
+  // into the glass tint, even blurred.
+  const glassBackdropUrl =
+    primary.thumbnailUrl && !(primary.nsfw && hideNsfwPreviews) ? primary.thumbnailUrl : null;
+
+  return (
+    <div
+      className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
+        groupActive
+          ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
+          : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+      }`}
+    >
+      {/* Glass backdrop: a blurred copy of the cover art bleeds behind the
+          card so it's tinted by its own thumbnail, matching the Global view
+          and Installed grid cards. */}
+      {glassBackdropUrl && (
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
+          <img
+            src={glassBackdropUrl}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
+              groupActive ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
+            }`}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+        </div>
+      )}
+
+      {/* Media: aspect-video cover, dimmed when the group is inactive. */}
+      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] bg-bg-tertiary">
+        <div
+          className={`h-full w-full transition-[filter,opacity] duration-200 ${
+            groupActive ? '' : 'grayscale-[0.6] opacity-[0.7]'
+          }`}
+        >
+          <ModThumbnail
+            src={primary.thumbnailUrl}
+            alt={primary.name}
+            nsfw={primary.nsfw}
+            hideNsfw={hideNsfwPreviews}
+            heroPortrait={useHeroPortraitThumbnails ? heroName : undefined}
+            className="h-full w-full"
+            imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
+            fallback={
+              <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
+                No preview
+              </div>
+            }
+          />
+        </div>
+        <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
+        {groupActive && (
+          <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
+            Active
+          </span>
+        )}
+      </div>
+
+      {/* Title + multi-variant state line. */}
+      <div className="min-w-0 px-0.5">
+        <h3
+          className="min-w-0 truncate text-sm font-semibold leading-tight text-text-primary"
+          title={primary.name}
+        >
+          {primary.name}
+        </h3>
+        {isMulti && (
+          <div
+            className={`mt-0.5 flex items-center gap-1 text-[11px] ${
+              enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
+            }`}
+          >
+            {enabledCount === 0 ? (
+              <>
+                <span>Pick a variant</span>
+                <ChevronDown className="h-3 w-3" />
+              </>
+            ) : (
+              <span>{`${enabledCount}/${group.variants.length} active`}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Single-variant groups: the whole card is the select control. Sits
+          under the pills/audio (z-20) so those keep their own handlers. */}
+      {!isMulti && (
+        <button
+          type="button"
+          onClick={() => onSelect(primary.id)}
+          aria-pressed={groupActive}
+          aria-label={groupActive ? `Active skin: ${primary.name}` : `Set active: ${primary.name}`}
+          title={groupActive ? 'Active skin' : 'Set active'}
+          className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
+        />
+      )}
+
+      {/* Sound preview. All variants of one GameBanana submission share the
+          same preview clip, so the group's primary audioUrl is the
+          representative sample. z-20 keeps it above the full-card toggle. */}
+      {primary.sourceSection === 'Sound' && primary.audioUrl && (
+        <div
+          className="relative z-20 mt-2"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <AudioPreviewPlayer src={primary.audioUrl} compact volume={soundVolume} />
+        </div>
+      )}
+
+      {/* Variant pills (multi-variant groups only). */}
+      {isMulti && (
+        <div
+          className={`relative z-20 mt-2 flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 ${
+            enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-white/[0.08]'
+          }`}
+          role="group"
+          aria-label="Variant toggles"
+        >
+          {group.variants.map((variant) => {
+            const label = variantPillLabel(variant);
+            return (
+              <button
+                key={variant.id}
+                type="button"
+                onClick={() =>
+                  onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
+                }
+                aria-pressed={variant.enabled}
+                title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
+                className={`max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                  variant.enabled
+                    ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
+                    : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One skin group as a compact thumbnail row (Locker list view). */
+function SkinGroupRow({
+  group,
+  onSelect,
+  onToggleVariant,
+  hideNsfwPreviews,
+  useHeroPortraitThumbnails,
+  heroName,
+  soundVolume,
+}: {
+  group: SkinGroup;
+  onSelect: (modId: string) => void;
+  onToggleVariant?: (modId: string) => void;
+  hideNsfwPreviews: boolean;
+  useHeroPortraitThumbnails: boolean;
+  heroName?: string;
+  soundVolume: number;
+}) {
+  const isMulti = group.variants.length > 1;
+  const groupActive = group.variants.some((v) => v.enabled);
+  const enabledCount = group.variants.filter((v) => v.enabled).length;
+  const primary = group.primary;
+  return (
+    <div
+      className={`rounded-md border transition-colors ${
+        groupActive
+          ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
+          : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (!isMulti) onSelect(primary.id);
+        }}
+        aria-disabled={isMulti}
+        className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
+          isMulti ? 'cursor-default' : 'cursor-pointer'
+        }`}
+        title={
+          isMulti
+            ? `${enabledCount}/${group.variants.length} variants enabled`
+            : groupActive
+              ? 'Active skin'
+              : 'Set active'
+        }
+      >
+        <div className="w-20 h-20 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
+          <ModThumbnail
+            src={primary.thumbnailUrl}
+            alt={primary.name}
+            nsfw={primary.nsfw}
+            hideNsfw={hideNsfwPreviews}
+            heroPortrait={useHeroPortraitThumbnails ? heroName : undefined}
+            className="w-full h-full"
+            fallback={
+              <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
+                No preview
+              </div>
+            }
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{primary.name}</div>
+          {isMulti ? (
+            enabledCount === 0 ? (
+              // Action prompt — the card itself isn't clickable for
+              // multi-variant groups, so without this users see
+              // "0/2 active" and have no idea what to do. The
+              // chevron points at the pill row directly below.
+              <div className="flex items-center gap-1 text-xs text-accent">
+                <span>Pick a variant</span>
+                <ChevronDown className="w-3 h-3" />
+              </div>
+            ) : (
+              <div className="text-xs text-text-secondary truncate">
+                {`${enabledCount}/${group.variants.length} active`}
+              </div>
+            )
+          ) : (
+            <div className="text-xs text-text-secondary truncate">
+              {primary.fileName}
+            </div>
+          )}
+        </div>
+        {!isMulti && groupActive && (
+          <span className="text-xs text-accent font-semibold">Active</span>
+        )}
+      </button>
+      {/* Sound preview. All variants of one GameBanana submission share
+          the same preview clip, so the group's primary audioUrl is the
+          representative sample. Rendered as a sibling of the toggle
+          button (not nested) so its own click handlers can stopPropagation
+          without fighting the card toggle. */}
+      {primary.sourceSection === 'Sound' && primary.audioUrl && (
+        <div
+          className="px-3 pb-3"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <AudioPreviewPlayer src={primary.audioUrl} compact volume={soundVolume} />
+        </div>
+      )}
+      {isMulti && (
+        <div
+          className={`flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-2 border-t ${
+            enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-border/60'
+          }`}
+          role="group"
+          aria-label="Variant toggles"
+        >
+          {group.variants.map((variant) => {
+            const label = variantPillLabel(variant);
+            return (
+              <button
+                key={variant.id}
+                type="button"
+                onClick={() =>
+                  onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
+                }
+                aria-pressed={variant.enabled}
+                title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
+                className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer max-w-[220px] truncate ${
+                  variant.enabled
+                    ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
+                    : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function HeroSkinsPanel({
@@ -84,6 +400,7 @@ export default function HeroSkinsPanel({
   showDownloadable = true,
   emptyMessage = 'Download a skin for this hero to manage it here.',
   browseAction,
+  layout = 'list',
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
@@ -100,139 +417,28 @@ export default function HeroSkinsPanel({
     </button>
   ) : null;
 
+  const groupProps = {
+    onSelect,
+    onToggleVariant,
+    hideNsfwPreviews,
+    useHeroPortraitThumbnails,
+    heroName,
+    soundVolume,
+  };
+
   return (
     <div className="space-y-2">
       {hasMods ? (
         <>
-          {groups.map((group) => {
-          const isMulti = group.variants.length > 1;
-          const groupActive = group.variants.some((v) => v.enabled);
-          const enabledCount = group.variants.filter((v) => v.enabled).length;
-          const primary = group.primary;
-          return (
-            <div
-              key={group.key}
-              className={`rounded-md border transition-colors ${
-                groupActive
-                  ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
-                  : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isMulti) onSelect(primary.id);
-                }}
-                aria-disabled={isMulti}
-                className={`w-full flex items-center gap-3 px-3 py-3 text-left ${
-                  isMulti ? 'cursor-default' : 'cursor-pointer'
-                }`}
-                title={
-                  isMulti
-                    ? `${enabledCount}/${group.variants.length} variants enabled`
-                    : groupActive
-                      ? 'Active skin'
-                      : 'Set active'
-                }
-              >
-                <div className="w-20 h-20 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-                  <ModThumbnail
-                    src={primary.thumbnailUrl}
-                    alt={primary.name}
-                    nsfw={primary.nsfw}
-                    hideNsfw={hideNsfwPreviews}
-                    heroPortrait={
-                      useHeroPortraitThumbnails ? heroName : undefined
-                    }
-                    className="w-full h-full"
-                    fallback={
-                      <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
-                        No preview
-                      </div>
-                    }
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">{primary.name}</div>
-                  {isMulti ? (
-                    enabledCount === 0 ? (
-                      // Action prompt — the card itself isn't clickable for
-                      // multi-variant groups, so without this users see
-                      // "0/2 active" and have no idea what to do. The
-                      // chevron points at the pill row directly below.
-                      <div className="flex items-center gap-1 text-xs text-accent">
-                        <span>Pick a variant</span>
-                        <ChevronDown className="w-3 h-3" />
-                      </div>
-                    ) : (
-                      <div className="text-xs text-text-secondary truncate">
-                        {`${enabledCount}/${group.variants.length} active`}
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-xs text-text-secondary truncate">
-                      {primary.fileName}
-                    </div>
-                  )}
-                </div>
-                {!isMulti && groupActive && (
-                  <span className="text-xs text-accent font-semibold">Active</span>
-                )}
-              </button>
-              {/* Sound preview. All variants of one GameBanana submission share
-                  the same preview clip, so the group's primary audioUrl is the
-                  representative sample. Rendered as a sibling of the toggle
-                  button (not nested) so its own click handlers can stopPropagation
-                  without fighting the card toggle. */}
-              {primary.sourceSection === 'Sound' && primary.audioUrl && (
-                <div
-                  className="px-3 pb-3"
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <AudioPreviewPlayer src={primary.audioUrl} compact volume={soundVolume} />
-                </div>
-              )}
-              {isMulti && (
-                <div
-                  className={`flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-2 border-t ${
-                    enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-border/60'
-                  }`}
-                  role="group"
-                  aria-label="Variant toggles"
-                >
-                  {group.variants.map((variant) => {
-                    const label = variantPillLabel(variant);
-                    return (
-                      <button
-                        key={variant.id}
-                        type="button"
-                        onClick={() =>
-                          onToggleVariant
-                            ? onToggleVariant(variant.id)
-                            : onSelect(variant.id)
-                        }
-                        aria-pressed={variant.enabled}
-                        title={
-                          variant.enabled
-                            ? `Disable: ${label}`
-                            : `Enable: ${label}`
-                        }
-                        className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer max-w-[220px] truncate ${
-                          variant.enabled
-                            ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
-                            : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+          {layout === 'cards' ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {groups.map((group) => (
+                <SkinGroupCard key={group.key} group={group} {...groupProps} />
+              ))}
             </div>
-          );
-          })}
+          ) : (
+            groups.map((group) => <SkinGroupRow key={group.key} group={group} {...groupProps} />)
+          )}
           {browseLink && (
             <div className="flex justify-center px-1 pt-0.5">
               {browseLink}
