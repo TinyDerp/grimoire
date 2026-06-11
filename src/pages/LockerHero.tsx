@@ -197,12 +197,122 @@ export function LockerHeroView({
     );
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Section rail (lg+): the armory nav. Vertical so it scales to however
-          many cosmetic surfaces the locker grows without crowding. */}
+    <div className="relative flex h-full overflow-hidden">
+      {/* Hero backdrop (2D portrait or live 3D pose) — full-bleed behind every
+          panel so it can bleed through the frosted-glass rail + selection
+          column. The image is sized to the window height with natural aspect
+          ratio (h-full w-auto) so wider viewports don't force object-cover to
+          scale it up and chop the head/feet off. Anchored to the right edge;
+          whatever space is left to the left of the image shows the solid
+          bg-primary, which the frosted overlay reads as a dark frosted panel:
+          same look as if the portrait extended that far. */}
+      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
+        {view3d ? (
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+              </div>
+            }
+          >
+            <HeroPoseViewer
+              key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
+              heroName={hero.name}
+              skinSources={activeSkinSources}
+              fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
+            />
+          </Suspense>
+        ) : renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className="absolute top-0 right-0 h-full w-auto max-w-none"
+            onError={handleRenderError}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
+            {hero.name}
+          </div>
+        )}
+        {/* Bottom gradient for depth (2D only; the 3D viewer owns its frame) */}
+        {!view3d && (
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        )}
+      </div>
+
+      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the backdrop;
+          sits above the frosted panels so it's always clickable. */}
+      <button
+        type="button"
+        onClick={() => setView3d((v) => !v)}
+        aria-pressed={view3d}
+        title={view3d ? 'Show 2D portrait' : 'Show live 3D pose'}
+        className={`hidden lg:flex absolute top-4 right-4 z-20 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+          view3d
+            ? 'border-accent/60 bg-accent/20 text-text-primary'
+            : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
+        }`}
+      >
+        <Box className="h-3.5 w-3.5" />
+        {view3d ? '2D' : '3D'}
+      </button>
+
+      {/* Progressive frosted-glass background — every layer (including the
+          base heavy blur) is masked with a long, smooth taper so nothing has
+          a hard right edge. Stacking blurs compounds: a region under all
+          three layers is much more blurred than one under only the lightest.
+          So as the lighter layers fade out first, the effective blur softens
+          from "very heavy" through "medium" to "nothing" without ever
+          dropping off a cliff. The container is intentionally much wider
+          than the panels it backs (rail + selection is ~640/710px; container
+          is ~1000/1100px) so the gradient has runway to feather all the way
+          to clear. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1000px] xl:w-[1100px]"
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(48px) saturate(135%)',
+            WebkitBackdropFilter: 'blur(48px) saturate(135%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 42%, transparent 94%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 42%, transparent 94%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 32%, transparent 78%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 32%, transparent 78%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 26%, transparent 60%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 26%, transparent 60%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 40%, rgba(26,26,26,0.75) 58%, rgba(26,26,26,0.4) 74%, rgba(26,26,26,0.15) 87%, transparent 97%)',
+          }}
+        />
+      </div>
+
+      {/* Section rail (lg+): the armory nav, floating on the frosted glass.
+          Vertical so it scales to however many cosmetic surfaces the locker
+          grows without crowding. */}
       <nav
         aria-label="Locker sections"
-        className="hidden lg:flex w-48 xl:w-52 flex-shrink-0 flex-col gap-1 border-r border-border/60 bg-bg-secondary/60 p-4 animate-slide-in-left"
+        className="relative z-10 hidden lg:flex w-44 xl:w-48 flex-shrink-0 flex-col gap-1 border-r border-white/5 p-4 pt-6 animate-slide-in-left"
       >
         {sections
           .filter((s) => s.show)
@@ -215,7 +325,7 @@ export function LockerHeroView({
               className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
                 activeSection === id
                   ? 'bg-accent/15 text-text-primary border border-accent/40'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary border border-transparent'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-white/5 border border-transparent'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -224,9 +334,10 @@ export function LockerHeroView({
           ))}
       </nav>
 
-      {/* Selection panel: centered column with comfortable reading width. */}
-      <div className="relative min-w-0 flex-1 overflow-y-auto scrollbar-glass bg-bg-primary">
-        <div className="mx-auto w-full max-w-xl p-6 space-y-6">
+      {/* Selection panel: wider than the old single sidebar (the rail freed
+          the horizontal space the pill strip used to need), still frosted. */}
+      <div className="relative z-10 w-full lg:w-[460px] xl:w-[520px] flex-shrink-0 overflow-y-auto scrollbar-glass bg-bg-secondary lg:bg-transparent animate-slide-in-left">
+        <div className="p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
             <button
@@ -295,59 +406,6 @@ export function LockerHeroView({
 
           <div className="space-y-4">{selectionPanel}</div>
         </div>
-      </div>
-
-      {/* Hero viewer pane (lg+): a first-class column instead of a backdrop,
-          so the 3D viewer is fully visible and interactive. */}
-      <div className="relative hidden lg:block w-[38%] xl:w-[42%] flex-shrink-0 overflow-hidden border-l border-border/60 bg-bg-primary animate-hero-zoom-in">
-        {view3d ? (
-          <Suspense
-            fallback={
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-              </div>
-            }
-          >
-            <HeroPoseViewer
-              key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
-              heroName={hero.name}
-              skinSources={activeSkinSources}
-              fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
-            />
-          </Suspense>
-        ) : renderSrc ? (
-          <img
-            src={renderSrc}
-            alt={hero.name}
-            className="absolute inset-0 h-full w-full object-contain"
-            onError={handleRenderError}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
-            {hero.name}
-          </div>
-        )}
-
-        {/* Bottom gradient for depth (2D only; the 3D viewer owns its frame) */}
-        {!view3d && (
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
-        )}
-
-        {/* 2D portrait <-> live 3D pose toggle. */}
-        <button
-          type="button"
-          onClick={() => setView3d((v) => !v)}
-          aria-pressed={view3d}
-          title={view3d ? 'Show 2D portrait' : 'Show live 3D pose'}
-          className={`absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-            view3d
-              ? 'border-accent/60 bg-accent/20 text-text-primary'
-              : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
-          }`}
-        >
-          <Box className="h-3.5 w-3.5" />
-          {view3d ? '2D' : '3D'}
-        </button>
       </div>
     </div>
   );
