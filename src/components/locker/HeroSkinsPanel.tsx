@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey } from '../../lib/lockerUtils';
@@ -102,6 +102,10 @@ function SkinGroupCard({
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
+  // Variant tray, collapsed by default so multi-variant cards match the
+  // single-variant card height. Starts open when nothing is enabled yet:
+  // that's the one moment the user must pick before anything works.
+  const [variantsOpen, setVariantsOpen] = useState(enabledCount === 0);
   // Skipped when NSFW previews are hidden so we never bleed hidden imagery
   // into the glass tint, even blurred.
   const glassBackdropUrl =
@@ -163,7 +167,7 @@ function SkinGroupCard({
         )}
       </div>
 
-      {/* Title + multi-variant state line. */}
+      {/* Title. */}
       <div className="min-w-0 px-0.5">
         <h3
           className="min-w-0 truncate text-sm font-semibold leading-tight text-text-primary"
@@ -171,36 +175,36 @@ function SkinGroupCard({
         >
           {primary.name}
         </h3>
-        {isMulti && (
-          <div
-            className={`mt-0.5 flex items-center gap-1 text-[11px] ${
-              enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
-            }`}
-          >
-            {enabledCount === 0 ? (
-              <>
-                <span>Pick a variant</span>
-                <ChevronDown className="h-3 w-3" />
-              </>
-            ) : (
-              <span>{`${enabledCount}/${group.variants.length} active`}</span>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Single-variant groups: the whole card is the select control. Sits
-          under the pills/audio (z-20) so those keep their own handlers. */}
-      {!isMulti && (
-        <button
-          type="button"
-          onClick={() => onSelect(primary.id)}
-          aria-pressed={groupActive}
-          aria-label={groupActive ? `Active skin: ${primary.name}` : `Set active: ${primary.name}`}
-          title={groupActive ? 'Active skin' : 'Set active'}
-          className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
-        />
-      )}
+      {/* Whole card is the primary control: select for single-variant groups,
+          open/close the variant tray for multi. Sits under the tray/audio
+          (z-20) so those keep their own handlers. */}
+      <button
+        type="button"
+        onClick={() =>
+          isMulti ? setVariantsOpen((open) => !open) : onSelect(primary.id)
+        }
+        aria-pressed={isMulti ? undefined : groupActive}
+        aria-expanded={isMulti ? variantsOpen : undefined}
+        aria-label={
+          isMulti
+            ? `${variantsOpen ? 'Hide' : 'Show'} variants: ${primary.name}`
+            : groupActive
+              ? `Active skin: ${primary.name}`
+              : `Set active: ${primary.name}`
+        }
+        title={
+          isMulti
+            ? variantsOpen
+              ? 'Hide variants'
+              : 'Show variants'
+            : groupActive
+              ? 'Active skin'
+              : 'Set active'
+        }
+        className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
+      />
 
       {/* Sound preview. All variants of one GameBanana submission share the
           same preview clip, so the group's primary audioUrl is the
@@ -215,37 +219,60 @@ function SkinGroupCard({
         </div>
       )}
 
-      {/* Variant pills (multi-variant groups only). */}
+      {/* Variant state line + collapsible tray (multi-variant groups only).
+          Collapsed it's a one-line summary, so the card holds the same height
+          as its single-variant neighbors; the whole-card button (z-10 under
+          this) toggles it. */}
       {isMulti && (
-        <div
-          className={`relative z-20 mt-2 flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 ${
-            enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-white/[0.08]'
-          }`}
-          role="group"
-          aria-label="Variant toggles"
-        >
-          {group.variants.map((variant) => {
-            const label = variantPillLabel(variant);
-            return (
-              <button
-                key={variant.id}
-                type="button"
-                onClick={() =>
-                  onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
-                }
-                aria-pressed={variant.enabled}
-                title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
-                className={`max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
-                  variant.enabled
-                    ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
-                    : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+        <>
+          <div
+            className={`pointer-events-none mt-0.5 flex items-center gap-1 px-0.5 text-[11px] ${
+              enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
+            }`}
+          >
+            <span>
+              {enabledCount === 0
+                ? 'Pick a variant'
+                : `${enabledCount}/${group.variants.length} active`}
+            </span>
+            <ChevronDown
+              className={`h-3 w-3 transition-transform duration-200 ${
+                variantsOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </div>
+          {variantsOpen && (
+            <div
+              className={`relative z-20 mt-1.5 flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 ${
+                enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-white/[0.08]'
+              }`}
+              role="group"
+              aria-label="Variant toggles"
+            >
+              {group.variants.map((variant) => {
+                const label = variantPillLabel(variant);
+                return (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    onClick={() =>
+                      onToggleVariant ? onToggleVariant(variant.id) : onSelect(variant.id)
+                    }
+                    aria-pressed={variant.enabled}
+                    title={variant.enabled ? `Disable: ${label}` : `Enable: ${label}`}
+                    className={`max-w-full truncate rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                      variant.enabled
+                        ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary'
+                        : 'border-border bg-bg-secondary text-text-primary/80 hover:border-accent/70 hover:text-text-primary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
