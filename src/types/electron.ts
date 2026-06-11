@@ -39,6 +39,13 @@ import type {
     GameBananaArtistLink,
 } from './gamebanana';
 import type { HeroPortrait, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
+import type {
+    DeadworksServer,
+    DeadworksContentItem,
+    DeadworksConnectResult,
+    DeadworksConnectProgress,
+    DeadworksRelayStats,
+} from './deadworks';
 
 export interface BrowseModsArgs {
     page: number;
@@ -679,6 +686,15 @@ export interface ElectronAPI {
         checkApiHealth: () => Promise<unknown>;
         getApiInfo: () => Promise<unknown>;
     };
+
+    // Deadworks custom-server browser
+    deadworksGetRelayUrl: () => Promise<string>;
+    deadworksListServers: () => Promise<DeadworksServer[]>;
+    deadworksServerContent: (serverId: string) => Promise<DeadworksContentItem[]>;
+    deadworksRelayStats: () => Promise<DeadworksRelayStats | null>;
+    deadworksPingServer: (addr: string) => Promise<number>;
+    deadworksConnect: (serverId: string, addr: string) => Promise<DeadworksConnectResult>;
+    onDeadworksDownloadProgress: (callback: (p: DeadworksConnectProgress) => void) => () => void;
 }
 
 export interface ProfileMod {

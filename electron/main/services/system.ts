@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { join, extname } from 'path';
-import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getAddonFolderPaths } from './deadlock';
+import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getAddonFolderPaths, hasDeadworksContentRoot, DEADWORKS_SEARCH_PATH } from './deadlock';
 
 // The canonical SearchPaths block for Deadlock with mod support
 const SEARCH_PATHS_BLOCK = `SearchPaths
@@ -20,14 +20,26 @@ const SEARCH_PATHS_BLOCK = `SearchPaths
 // The canonical block with one extra `Game citadel/addonsN` line per overflow
 // folder, inserted right after the base citadel/addons line and reusing its
 // indentation. Per Model A precedence (earlier line wins), base addons outranks
-// addons1 outranks addons2, etc. With no overflow folders this is byte-identical
-// to SEARCH_PATHS_BLOCK, so existing installs are unaffected.
-function buildSearchPathsBlock(overflowFolderNames: string[]): string {
-    if (overflowFolderNames.length === 0) return SEARCH_PATHS_BLOCK;
+// addons1 outranks addons2, etc.
+//
+// When `includeDeadworks` is set, a final `Game citadel/deadworks_addons/vpks`
+// line is appended to the addon group (lowest precedence, so user mods always
+// win a collision). This is what keeps Deadworks server content mounted across
+// a Fix Configuration: grimoire owns and rewrites the whole SearchPaths block,
+// so the deadworks path has to live inside the canonical block, not as a
+// separate `addonroot` line the rewrite would erase.
+//
+// With no overflow folders and no deadworks content this is byte-identical to
+// SEARCH_PATHS_BLOCK, so existing installs are unaffected.
+function buildSearchPathsBlock(overflowFolderNames: string[], includeDeadworks: boolean): string {
+    if (overflowFolderNames.length === 0 && !includeDeadworks) return SEARCH_PATHS_BLOCK;
     return SEARCH_PATHS_BLOCK.replace(
         /^([^\S\n]*Game[^\S\n]+)citadel\/addons[^\S\n]*$/m,
-        (line, prefix: string) =>
-            [line, ...overflowFolderNames.map((name) => `${prefix}citadel/${name}`)].join('\n')
+        (line, prefix: string) => {
+            const extra = overflowFolderNames.map((name) => `${prefix}citadel/${name}`);
+            if (includeDeadworks) extra.push(`${prefix}${DEADWORKS_SEARCH_PATH}`);
+            return [line, ...extra].join('\n');
+        }
     );
 }
 
@@ -179,7 +191,16 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             const missingOverflow = getOverflowFolderNames(deadlockPath).filter(
                 (name) => !hasActivePath(block.body, `citadel/${name}`)
             );
-            if (missingOverflow.length === 0) {
+            // Once Deadworks content has been provisioned, its search path is
+            // forced present too, so downloaded server content keeps mounting even
+            // after a game update resets gameinfo.gi.
+            const missingDeadworks =
+                hasDeadworksContentRoot(deadlockPath) && !hasActivePath(block.body, DEADWORKS_SEARCH_PATH);
+            const missing = [
+                ...missingOverflow,
+                ...(missingDeadworks ? ['deadworks_addons'] : []),
+            ];
+            if (missing.length === 0) {
                 return {
                     configured: true,
                     missing: false,
@@ -190,7 +211,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
             return {
                 configured: false,
                 missing: false,
-                message: `Overflow mod folders are missing from gameinfo.gi (${missingOverflow.join(', ')}). Use Fix Configuration to restore them.`,
+                message: `Mod folders are missing from gameinfo.gi (${missing.join(', ')}). Use Fix Configuration to restore them.`,
                 candidates: [],
             };
         }
@@ -245,16 +266,20 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         const block = findSearchPathsBlock(content);
 
         // The canonical block includes a Game line for every overflow folder that
-        // currently exists on disk, so a user-triggered repair restores them too.
+        // currently exists on disk (plus the Deadworks content path when present),
+        // so a user-triggered repair restores them too.
         const overflow = getOverflowFolderNames(deadlockPath);
-        const canonical = buildSearchPathsBlock(overflow);
+        const includeDeadworks = hasDeadworksContentRoot(deadlockPath);
+        const canonical = buildSearchPathsBlock(overflow, includeDeadworks);
 
-        // Already correct: a real SearchPaths block with the required base paths
-        // AND every existing overflow folder's Game line present.
+        // Already correct: a real SearchPaths block with the required base paths,
+        // every existing overflow folder's Game line, AND the deadworks path when
+        // server content has been provisioned.
         if (
             block &&
             hasRequiredSearchPaths(block.body) &&
-            overflow.every((name) => hasActivePath(block.body, `citadel/${name}`))
+            overflow.every((name) => hasActivePath(block.body, `citadel/${name}`)) &&
+            (!includeDeadworks || hasActivePath(block.body, DEADWORKS_SEARCH_PATH))
         ) {
             return {
                 configured: true,
@@ -315,6 +340,22 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
             candidates: [],
         };
     }
+}
+
+/**
+ * Ensure gameinfo.gi mounts the Deadworks content search path before a connect.
+ *
+ * Call this after the deadworks_addons/vpks folder exists. If the canonical
+ * block is already correct (it now requires the deadworks line whenever content
+ * is provisioned) this is a cheap no-op; otherwise it rewrites the canonical
+ * block, which includes the deadworks path. Returns the resulting status so the
+ * connect flow can surface a "close Deadlock and retry" message when the file is
+ * locked or unparseable.
+ */
+export function ensureDeadworksSearchPath(deadlockPath: string): GameinfoStatus {
+    const status = getGameinfoStatus(deadlockPath);
+    if (status.configured) return status;
+    return fixGameinfo(deadlockPath);
 }
 
 /**

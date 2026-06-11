@@ -81,6 +81,7 @@ import './ipc/abilityColors';
 import './ipc/locker';
 import './ipc/previewCache';
 import './ipc/discord';
+import './ipc/servers';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';

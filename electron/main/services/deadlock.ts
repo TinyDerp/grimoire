@@ -285,6 +285,48 @@ export function metaKeyFor(vpkPath: string): string {
     return OVERFLOW_FOLDER_RE.test(parentName) ? `${parentName}/${fileName}` : fileName;
 }
 
+// ── Deadworks custom-server content ──────────────────────────────────────────
+//
+// Deadworks dedicated servers ship downloadable content (maps + addon VPKs) the
+// client must fetch before connecting. We keep that content in its own citadel
+// subtree, entirely separate from the user's citadel/addons mod budget, so it
+// never competes for a pakNN slot and is trivial to purge. The vpks folder is
+// mounted as its own Game search path in gameinfo.gi (see system.ts).
+
+/** citadel-relative search path the engine mounts for Deadworks addon VPKs.
+ *  Kept in sync with getDeadworksAddonsPath. */
+export const DEADWORKS_SEARCH_PATH = 'citadel/deadworks_addons/vpks';
+
+/** Folder holding downloaded Deadworks addon VPKs (mounted via DEADWORKS_SEARCH_PATH). */
+export function getDeadworksAddonsPath(deadlockPath: string): string {
+    const p = join(deadlockPath, 'game', 'citadel', 'deadworks_addons', 'vpks');
+    if (!existsSync(p)) mkdirSync(p, { recursive: true });
+    return p;
+}
+
+/** Folder for downloaded Deadworks maps. Maps load via the base `Game citadel`
+ *  search path, so this needs no gameinfo entry of its own. */
+export function getDeadworksMapsPath(deadlockPath: string): string {
+    const p = join(deadlockPath, 'game', 'citadel', 'maps');
+    if (!existsSync(p)) mkdirSync(p, { recursive: true });
+    return p;
+}
+
+/** Local install-version ledger for Deadworks content, so we skip re-downloading
+ *  VPKs whose server-declared version we already hold. */
+export function getDeadworksVersionsPath(deadlockPath: string): string {
+    const dir = join(deadlockPath, 'game', 'citadel', 'deadworks_cache');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    return join(dir, 'versions.json');
+}
+
+/** True once any Deadworks content has been provisioned (the vpks folder was
+ *  created). Drives whether the deadworks Game line belongs in the canonical
+ *  gameinfo block, mirroring how overflow folders are conditionally included. */
+export function hasDeadworksContentRoot(deadlockPath: string): boolean {
+    return existsSync(join(deadlockPath, 'game', 'citadel', 'deadworks_addons', 'vpks'));
+}
+
 /**
  * Get the gameinfo.gi file path
  */
