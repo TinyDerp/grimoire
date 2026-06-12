@@ -2,8 +2,10 @@
 // API: https://api.deadlock-api.com
 
 import type {
+    HeroAsset,
+    RankAsset,
     PlayerMMR,
-    PlayerMMRHistory,
+    PlayerMMRHistoryEntry,
     PlayerHeroStats,
     PlayerHeroStat,
     PlayerMatchHistory,
@@ -115,6 +117,125 @@ async function fetchFromAPI<T>(
 }
 
 // ============================================
+// Hero Assets (assets.deadlock-api.com)
+// ============================================
+
+const ASSETS_API_HEROES = 'https://assets.deadlock-api.com/v2/heroes'
+const HERO_ASSETS_TTL_MS = 24 * 60 * 60 * 1000
+
+interface RawHeroAsset {
+    id: number
+    name: string
+    in_development?: boolean
+    disabled?: boolean
+    player_selectable?: boolean
+    images?: Record<string, string | null>
+}
+
+let heroAssetsCache: { data: HeroAsset[]; fetchedAt: number } | null = null
+let heroAssetsInflight: Promise<HeroAsset[]> | null = null
+
+/**
+ * Hero roster from the assets API: authoritative id -> name mapping plus the
+ * in_development/disabled flags the UI uses to hide test heroes. Cached in
+ * memory for 24h; a fetch failure falls back to the last good response so an
+ * offline session degrades to the renderer's static fallback map instead of
+ * erroring.
+ */
+export async function getHeroAssets(): Promise<HeroAsset[]> {
+    if (heroAssetsCache && Date.now() - heroAssetsCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return heroAssetsCache.data
+    }
+    if (heroAssetsInflight) return heroAssetsInflight
+
+    heroAssetsInflight = (async () => {
+        try {
+            const response = await fetch(ASSETS_API_HEROES, {
+                headers: { Accept: 'application/json', 'User-Agent': GRIMOIRE_USER_AGENT },
+                signal: AbortSignal.timeout(15000),
+            })
+            if (!response.ok) {
+                throw new Error(`Assets API error: ${response.status}`)
+            }
+            const raw = (await response.json()) as RawHeroAsset[]
+            const data = raw.map((h) => ({
+                id: h.id,
+                name: h.name,
+                in_development: h.in_development ?? false,
+                disabled: h.disabled ?? false,
+                player_selectable: h.player_selectable ?? false,
+                icon_url: h.images?.icon_image_small_webp ?? h.images?.icon_image_small ?? null,
+                card_url: h.images?.icon_hero_card_webp ?? h.images?.icon_hero_card ?? null,
+            }))
+            heroAssetsCache = { data, fetchedAt: Date.now() }
+            return data
+        } catch (err) {
+            if (heroAssetsCache) return heroAssetsCache.data
+            throw err
+        } finally {
+            heroAssetsInflight = null
+        }
+    })()
+    return heroAssetsInflight
+}
+
+const ASSETS_API_RANKS = 'https://assets.deadlock-api.com/v2/ranks'
+
+interface RawRankAsset {
+    tier: number
+    name: string
+    color?: string | null
+    images?: Record<string, string | null>
+}
+
+let rankAssetsCache: { data: RankAsset[]; fetchedAt: number } | null = null
+let rankAssetsInflight: Promise<RankAsset[]> | null = null
+
+/**
+ * Rank ladder (division names, colors, badge art) from the assets API. Same
+ * caching/fallback behavior as getHeroAssets.
+ */
+export async function getRankAssets(): Promise<RankAsset[]> {
+    if (rankAssetsCache && Date.now() - rankAssetsCache.fetchedAt < HERO_ASSETS_TTL_MS) {
+        return rankAssetsCache.data
+    }
+    if (rankAssetsInflight) return rankAssetsInflight
+
+    rankAssetsInflight = (async () => {
+        try {
+            const response = await fetch(ASSETS_API_RANKS, {
+                headers: { Accept: 'application/json', 'User-Agent': GRIMOIRE_USER_AGENT },
+                signal: AbortSignal.timeout(15000),
+            })
+            if (!response.ok) {
+                throw new Error(`Assets API error: ${response.status}`)
+            }
+            const raw = (await response.json()) as RawRankAsset[]
+            const data = raw.map((r) => ({
+                tier: r.tier,
+                name: r.name,
+                color: r.color ?? null,
+                badge_url: r.images?.large_webp ?? r.images?.large ?? null,
+                subrank_urls: [1, 2, 3, 4, 5, 6].map(
+                    (i) =>
+                        r.images?.[`small_subrank${i}_webp`] ??
+                        r.images?.[`small_subrank${i}`] ??
+                        null
+                ),
+            }))
+            rankAssetsCache = { data, fetchedAt: Date.now() }
+            return data
+        } catch (err) {
+            if (rankAssetsCache) return rankAssetsCache.data
+            throw err
+        } finally {
+            rankAssetsInflight = null
+        }
+    })()
+    return rankAssetsInflight
+}
+
+// ============================================
 // Player Endpoints
 // ============================================
 
@@ -138,13 +259,18 @@ export async function getPlayerMMR(
 }
 
 /**
- * Get MMR history for a player
+ * Get MMR history for a player. The API returns a flat array with one entry
+ * per ranked match, oldest first.
  */
 export async function getPlayerMMRHistory(
     accountId: number,
     options?: FetchOptions
-): Promise<PlayerMMRHistory> {
-    return fetchFromAPI<PlayerMMRHistory>(`/players/${accountId}/mmr-history`, undefined, options)
+): Promise<PlayerMMRHistoryEntry[]> {
+    return fetchFromAPI<PlayerMMRHistoryEntry[]>(
+        `/players/${accountId}/mmr-history`,
+        undefined,
+        options
+    )
 }
 
 /**

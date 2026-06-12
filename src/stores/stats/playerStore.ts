@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
     TrackedPlayer,
     PlayerMMR,
+    PlayerMMRHistoryEntry,
     PlayerHeroStats,
     PlayerMatchHistory,
     AggregatedStats,
@@ -15,6 +16,7 @@ import { type Async, asyncIdle, asyncLoading, asyncLoaded, asyncError, toErrorMe
 // the tabs share one loading/error state for player-scoped data.
 export interface PlayerDataBundle {
     mmr: PlayerMMR | null
+    mmrHistory: PlayerMMRHistoryEntry[]
     heroStats: PlayerHeroStats | null
     matchHistory: PlayerMatchHistory | null
     aggregated: AggregatedStats | null
@@ -24,6 +26,7 @@ export interface PlayerDataBundle {
 
 const EMPTY_BUNDLE: PlayerDataBundle = {
     mmr: null,
+    mmrHistory: [],
     heroStats: null,
     matchHistory: null,
     aggregated: null,
@@ -50,16 +53,24 @@ interface PlayerState {
 }
 
 async function fetchBundle(accountId: number): Promise<PlayerDataBundle> {
-    const [mmrData, heroStats, matchHistory, aggregated, localMMR, localMatches] = await Promise.all([
-        window.electronAPI.stats.getPlayerMMR([accountId]) as Promise<PlayerMMR[]>,
-        window.electronAPI.stats.getPlayerHeroStats(accountId) as Promise<PlayerHeroStats>,
-        window.electronAPI.stats.getPlayerMatchHistory(accountId, 20) as Promise<PlayerMatchHistory>,
-        window.electronAPI.stats.getAggregatedStats(accountId) as Promise<AggregatedStats | null>,
-        window.electronAPI.stats.getLocalMMRHistory(accountId, 60) as Promise<MMRSnapshot[]>,
-        window.electronAPI.stats.getLocalMatchHistory(accountId, 50) as Promise<StoredMatch[]>,
-    ])
+    const [mmrData, mmrHistory, heroStats, matchHistory, aggregated, localMMR, localMatches] =
+        await Promise.all([
+            window.electronAPI.stats.getPlayerMMR([accountId]) as Promise<PlayerMMR[]>,
+            // Full per-match score history drives the trajectory chart; if the
+            // endpoint hiccups the chart falls back to local daily snapshots,
+            // so don't let it sink the whole bundle.
+            (window.electronAPI.stats.getPlayerMMRHistory(accountId) as Promise<
+                PlayerMMRHistoryEntry[]
+            >).catch(() => [] as PlayerMMRHistoryEntry[]),
+            window.electronAPI.stats.getPlayerHeroStats(accountId) as Promise<PlayerHeroStats>,
+            window.electronAPI.stats.getPlayerMatchHistory(accountId, 20) as Promise<PlayerMatchHistory>,
+            window.electronAPI.stats.getAggregatedStats(accountId) as Promise<AggregatedStats | null>,
+            window.electronAPI.stats.getLocalMMRHistory(accountId, 60) as Promise<MMRSnapshot[]>,
+            window.electronAPI.stats.getLocalMatchHistory(accountId, 100) as Promise<StoredMatch[]>,
+        ])
     return {
         mmr: mmrData[0] || null,
+        mmrHistory,
         heroStats,
         matchHistory,
         aggregated,

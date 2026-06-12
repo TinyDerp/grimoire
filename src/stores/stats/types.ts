@@ -33,75 +33,9 @@ export interface MateStats {
     win_rate?: number
 }
 
-export interface PartyStats {
-    party_size: number
-    wins: number
-    matches_played: number
-    matches: number[]
-    win_rate?: number
-}
+// PartyStats removed: the /v1/players/{id}/party-stats endpoint was removed
+// upstream (404 as of 2026-06-11).
 
-// Mirrors FlatHeroCounterStats / FlatHeroSynergyStats in services/stats.ts
-// (win_rate is computed by the service as a 0-100 percentage).
-export interface HeroCounterStats {
-    hero_id: number
-    enemy_hero_id: number
-    wins: number
-    losses: number
-    matches: number
-    win_rate: number
-}
-
-export interface HeroSynergyStats {
-    hero_id: number
-    ally_hero_id: number
-    wins: number
-    losses: number
-    matches: number
-    win_rate: number
-}
-
-export interface HeroCombStats {
-    hero_ids: number[]
-    wins: number
-    losses: number
-    matches: number
-    win_rate?: number
-}
-
-export interface BadgeDistributionEntry {
-    badge_level: number
-    badge_name: string
-    badge_group: string
-    badge_color: string
-    player_count: number
-    percentage: number
-}
-
-// Raw /v1/builds entry: a wrapper around the in-game hero_build object.
-export interface RawBuildEntry {
-    hero_build: {
-        hero_build_id: number
-        hero_id: number
-        author_account_id: number
-        name: string
-        description: string | null
-        version: number
-        last_updated_timestamp: number | null
-        tags: unknown[]
-    }
-    num_favorites: number | null
-    num_weekly_favorites: number | null
-}
-
-// Flattened for display.
-export interface BuildListing {
-    id: number
-    hero_id: number
-    name: string
-    description: string | null
-    version: number
-    favorites: number
-    weekly_favorites: number
-    updated_at: number | null
-}
+// (Counter/synergy/comb-stats, badge-distribution, and builds shapes lived
+// here while the Analytics/Meta/Builds tabs existed; removed with those tabs.
+// The IPC surface for them remains in electron/main if they come back.)

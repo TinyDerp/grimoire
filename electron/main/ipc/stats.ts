@@ -98,6 +98,14 @@ ipcMain.handle('stats:getPlayerMMRHistory', async (_, accountId: number) => {
     return statsApi.getPlayerMMRHistory(accountId)
 })
 
+ipcMain.handle('stats:getHeroes', async () => {
+    return statsApi.getHeroAssets()
+})
+
+ipcMain.handle('stats:getRanks', async () => {
+    return statsApi.getRankAssets()
+})
+
 ipcMain.handle('stats:getPlayerHeroStats', async (_, accountId: number) => {
     const heroStats = await statsApi.getPlayerHeroStats(accountId)
 

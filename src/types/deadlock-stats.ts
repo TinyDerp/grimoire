@@ -19,16 +19,18 @@ export interface PlayerMMR {
   division_tier: number // Subtier within division
 }
 
+/**
+ * One entry from /players/{id}/mmr-history. The API returns a flat array of
+ * these (one per ranked match), same field names as PlayerMMR.
+ */
 export interface PlayerMMRHistoryEntry {
-  match_id: number
-  mmr: number
-  mmr_change: number
-  timestamp: number
-}
-
-export interface PlayerMMRHistory {
   account_id: number
-  history: PlayerMMRHistoryEntry[]
+  match_id: number
+  start_time: number
+  player_score: number
+  rank: number
+  division: number
+  division_tier: number
 }
 
 /**
@@ -473,9 +475,47 @@ export interface StatsSettings {
 }
 
 // ============================================
-// Hero Name Lookup
+// Hero Assets
 // ============================================
 
+/**
+ * Trimmed hero record from assets.deadlock-api.com/v2/heroes, the source of
+ * truth for hero id -> name/icon mapping and for which heroes are real
+ * (in_development=true marks test heroes like Gunslinger/hero_testhero).
+ * Fetched live via stats:getHeroes; HERO_NAMES below is the offline fallback.
+ */
+export interface HeroAsset {
+  id: number
+  name: string
+  in_development: boolean
+  disabled: boolean
+  player_selectable: boolean
+  icon_url: string | null
+  card_url: string | null
+}
+
+/**
+ * Trimmed rank record from assets.deadlock-api.com/v2/ranks. `tier` is the
+ * division number (0 Obscurus .. 11 Eternus). Ranked score maps onto
+ * divisions at 6 points per division: division d spans [(d-1)*6, d*6).
+ */
+export interface RankAsset {
+  tier: number
+  name: string
+  color: string | null
+  badge_url: string | null
+  /** Small subrank badges, index 0 = subrank 1 ... index 5 = subrank 6. */
+  subrank_urls: (string | null)[]
+}
+
+// ============================================
+// Hero Name Lookup (offline fallback)
+// ============================================
+
+// Verified against assets.deadlock-api.com/v2/heroes on 2026-06-11. The
+// previous revision of this map had drifted badly (ids 16+ were shifted, e.g.
+// 16 labeled Grey Talon when 16 is Calico), so stored hero_name values from
+// older syncs are unreliable: render from hero_id where possible.
 export const HERO_NAMES: Record<number, string> = {
   1: 'Infernus',
   2: 'Seven',
@@ -490,29 +530,40 @@ export const HERO_NAMES: Record<number, string> = {
   13: 'Haze',
   14: 'Holliday',
   15: 'Bebop',
-  16: 'Grey Talon',
-  17: 'Mo & Krill',
-  18: 'Shiv',
-  19: 'Ivy',
-  20: 'Warden',
-  25: 'Yamato',
-  27: 'Lash',
-  31: 'Viscous',
-  35: 'Pocket',
-  50: 'Mirage',
-  55: 'Calico',
-  58: 'Sinclair',
-  59: 'Billy',
-  60: 'Mina',
-  61: 'Drifter',
-  62: 'Paige',
-  63: 'Victor',
-  64: 'Doorman',
-  65: 'Sinclair',  // Note: ID 58 is also Sinclair - 65 was previously Magician but corrected
-  67: 'Vyper',
-  // Experimental heroes (52, 66, 68, 69, 72) intentionally excluded
+  16: 'Calico',
+  17: 'Grey Talon',
+  18: 'Mo & Krill',
+  19: 'Shiv',
+  20: 'Ivy',
+  21: 'Kali', // disabled in-game, but old match history can reference her
+  25: 'Warden',
+  27: 'Yamato',
+  31: 'Lash',
+  35: 'Viscous',
+  50: 'Pocket',
+  52: 'Mirage',
+  58: 'Vyper',
+  60: 'Sinclair',
+  63: 'Mina',
+  64: 'Drifter',
+  65: 'Venator',
+  66: 'Victor',
+  67: 'Paige',
+  69: 'The Doorman',
+  72: 'Billy',
+  76: 'Graves',
+  77: 'Apollo',
+  79: 'Rem',
+  80: 'Silver',
+  81: 'Celeste',
 }
 
-// Set of experimental hero IDs to filter from displays
-export const EXPERIMENTAL_HERO_IDS = new Set([52, 66, 68, 69, 72])
+/**
+ * Test/in-development hero ids (assets API in_development=true as of
+ * 2026-06-11). Offline fallback only: when hero assets are loaded, filtering
+ * uses the live in_development flag instead.
+ */
+export const EXPERIMENTAL_HERO_IDS = new Set([
+  38, 39, 47, 48, 49, 51, 53, 54, 56, 57, 59, 61, 62, 68, 70, 71, 73, 74, 75, 78, 82, 83,
+])
 
