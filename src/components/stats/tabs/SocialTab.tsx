@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Users, Users2, UserCheck, UserX, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react'
+import { Users2, UserCheck, UserX, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react'
 import { Card, Button } from '../../common/ui'
 import { Skeleton } from '../../common/Skeleton'
 import { useSocialStore } from '../../../stores/stats/socialStore'
@@ -103,9 +103,9 @@ export function SocialTab({ accountId }: SocialTabProps) {
         )
     }
 
-    const { enemies, mates, parties } = social.data
+    const { enemies, mates } = social.data
 
-    if (enemies.length === 0 && mates.length === 0 && parties.length === 0) {
+    if (enemies.length === 0 && mates.length === 0) {
         return (
             <div className="text-center py-12 text-text-secondary">
                 <Users2 className="w-10 h-10 mx-auto mb-3 opacity-50" />
@@ -116,33 +116,11 @@ export function SocialTab({ accountId }: SocialTabProps) {
 
     return (
         <div className="space-y-4">
-            {parties.length > 0 && (
-                <Card title="Party Performance" icon={Users}>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {parties.map((party) => (
-                            <div key={party.party_size} className="p-4 bg-bg-tertiary rounded-sm text-center">
-                                <div className="text-2xl font-bold font-reaver mb-1">
-                                    {party.party_size === 1 ? 'Solo' : `${party.party_size}-Stack`}
-                                </div>
-                                <div className="text-sm text-text-secondary mb-2">
-                                    {party.matches_played} matches
-                                </div>
-                                <div className={`text-lg font-semibold ${winRateClass(party.win_rate || 0)}`}>
-                                    {(party.win_rate || 0).toFixed(1)}% WR
-                                </div>
-                                <div className="text-xs text-text-secondary mt-1">
-                                    {party.wins}W - {party.matches_played - party.wins}L
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </Card>
-            )}
-
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
             {mates.length > 0 && (
-                <Card title="Best Teammates" icon={UserCheck}>
+                <Card title="Best Teammates" icon={UserCheck} description="Min 3 shared matches">
                     <div className="space-y-2">
-                        {mates.slice(0, 10).map((mate: MateStats) => (
+                        {mates.slice(0, 15).map((mate: MateStats) => (
                             <PlayerStatRow
                                 key={mate.mate_id}
                                 accountId={mate.mate_id}
@@ -161,9 +139,9 @@ export function SocialTab({ accountId }: SocialTabProps) {
             )}
 
             {enemies.length > 0 && (
-                <Card title="Frequent Opponents" icon={UserX}>
+                <Card title="Frequent Opponents" icon={UserX} description="Min 3 shared matches">
                     <div className="space-y-2">
-                        {enemies.slice(0, 10).map((enemy: EnemyStats) => (
+                        {enemies.slice(0, 15).map((enemy: EnemyStats) => (
                             <PlayerStatRow
                                 key={enemy.enemy_id}
                                 accountId={enemy.enemy_id}
@@ -180,6 +158,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                     </div>
                 </Card>
             )}
+            </div>
         </div>
     )
 }

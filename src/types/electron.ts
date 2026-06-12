@@ -682,7 +682,9 @@ export interface ElectronAPI {
 
         // Player Data (API)
         getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
-        getPlayerMMRHistory: (accountId: number) => Promise<unknown>;
+        getPlayerMMRHistory: (accountId: number) => Promise<unknown[]>;
+        getHeroes: () => Promise<unknown[]>;
+        getRanks: () => Promise<unknown[]>;
         getPlayerHeroStats: (accountId: number) => Promise<unknown>;
         getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) => Promise<unknown>;
         getPlayerSteamProfiles: (accountIds: number[]) => Promise<unknown[]>;

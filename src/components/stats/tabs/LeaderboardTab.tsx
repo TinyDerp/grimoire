@@ -3,7 +3,8 @@ import { Trophy } from 'lucide-react'
 import { Card, Button } from '../../common/ui'
 import { useLeaderboardStore } from '../../../stores/stats/leaderboardStore'
 import type { LeaderboardRegion } from '../../../types/deadlock-stats'
-import { AsyncSection } from '../primitives'
+import { AsyncSection, HeroChip } from '../primitives'
+import { rankLabelFromBadge } from '../format'
 
 const REGIONS: { value: LeaderboardRegion; label: string }[] = [
     { value: 'NAmerica', label: 'NA' },
@@ -64,7 +65,16 @@ export function LeaderboardTab() {
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-5 text-sm text-text-secondary shrink-0">
-                                        <span>Badge {entry.badge_level}</span>
+                                        {(entry.top_hero_ids?.length ?? 0) > 0 && (
+                                            <span className="hidden md:flex items-center gap-1">
+                                                {entry.top_hero_ids.slice(0, 3).map((heroId) => (
+                                                    <HeroChip key={heroId} heroId={heroId} size="sm" />
+                                                ))}
+                                            </span>
+                                        )}
+                                        <span className="text-accent w-28 text-right">
+                                            {rankLabelFromBadge(entry.badge_level)}
+                                        </span>
                                         {entry.wins !== undefined && (
                                             <span className="text-green-400">{entry.wins} wins</span>
                                         )}

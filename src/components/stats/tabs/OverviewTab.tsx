@@ -1,36 +1,20 @@
+import { useMemo } from 'react'
 import { Gamepad2, Target, TrendingUp } from 'lucide-react'
 import { Card } from '../../common/ui'
 import { usePlayerStore } from '../../../stores/stats/playerStore'
-import { EXPERIMENTAL_HERO_IDS } from '../../../types/deadlock-stats'
-import { StatCard, MatchRow } from '../primitives'
-import { heroName, winRateClass } from '../format'
-import { MmrSparkline } from '../MmrSparkline'
-
-// Deadlock rank ladder, indexed by the API's division number (1-11).
-const DIVISION_NAMES = [
-    '',
-    'Initiate',
-    'Seeker',
-    'Alchemist',
-    'Arcanist',
-    'Ritualist',
-    'Emissary',
-    'Archon',
-    'Oracle',
-    'Phantom',
-    'Ascendant',
-    'Eternus',
-]
-
-function rankLabel(division: number, tier: number): string {
-    const name = DIVISION_NAMES[division]
-    if (!name) return '--'
-    return tier > 0 ? `${name} ${tier}` : name
-}
+import { useHeroStore, isTestHero, useHeroName } from '../../../stores/stats/heroStore'
+import { StatCard, MatchRow, HeroChip } from '../primitives'
+import { rankLabel, winRateClass } from '../format'
+import { MmrChart } from '../MmrChart'
 
 export function OverviewTab() {
     const playerData = usePlayerStore((s) => s.playerData)
-    const { mmr, heroStats, matchHistory, aggregated, localMMRHistory } = playerData.data
+    const accountId = usePlayerStore((s) => s.selectedAccountId)
+    const byId = useHeroStore((s) => s.byId)
+    const ranks = useHeroStore((s) => s.ranks)
+    const heroName = useHeroName()
+
+    const { mmr, mmrHistory, heroStats, matchHistory, aggregated, localMMRHistory } = playerData.data
 
     const winRate =
         aggregated && aggregated.total_matches > 0
@@ -40,17 +24,39 @@ export function OverviewTab() {
         ? (aggregated.total_kills + aggregated.total_assists) / Math.max(aggregated.total_deaths, 1)
         : null
 
-    const topHeroes = (heroStats?.heroes ?? [])
-        .filter((h) => !EXPERIMENTAL_HERO_IDS.has(h.hero_id))
-        .slice(0, 6)
+    const heroes = useMemo(
+        () =>
+            (heroStats?.heroes ?? [])
+                .filter((h) => !isTestHero(byId, h.hero_id))
+                .slice()
+                .sort((a, b) => b.matches_played - a.matches_played),
+        [heroStats, byId]
+    )
+
+    const rankBadge = mmr
+        ? (ranks[mmr.division]?.subrank_urls[mmr.division_tier - 1] ??
+          ranks[mmr.division]?.badge_url ??
+          null)
+        : null
 
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    label="MMR"
+                    label="Ranked Score"
                     tone="accent"
-                    value={mmr?.player_score?.toFixed(0) ?? '--'}
+                    value={
+                        <span className="inline-flex items-center justify-center gap-2">
+                            {rankBadge && (
+                                <img
+                                    src={rankBadge}
+                                    alt=""
+                                    className="w-9 h-9 object-contain"
+                                />
+                            )}
+                            {mmr?.player_score?.toFixed(0) ?? '--'}
+                        </span>
+                    }
                     sub={mmr ? rankLabel(mmr.division, mmr.division_tier) : undefined}
                 />
                 <StatCard
@@ -76,53 +82,118 @@ export function OverviewTab() {
             </div>
 
             <Card
-                title="MMR Trajectory"
+                title="Ranked Trajectory"
                 icon={TrendingUp}
-                description="Daily snapshots recorded locally while you track this player"
+                description="Score per ranked match, from the full account history"
             >
-                <MmrSparkline history={localMMRHistory} />
+                <MmrChart key={accountId} history={mmrHistory} snapshots={localMMRHistory} />
             </Card>
 
-            {matchHistory && matchHistory.matches.length > 0 && (
-                <Card title="Recent Matches" icon={Gamepad2}>
-                    <div className="space-y-2">
-                        {matchHistory.matches.slice(0, 5).map((match) => (
-                            <MatchRow
-                                key={match.match_id}
-                                matchId={match.match_id}
-                                outcome={match.match_outcome ?? (match.match_result === 1 ? 'Win' : 'Loss')}
-                                hero={match.hero_name ?? heroName(match.hero_id)}
-                                kills={match.kills ?? match.player_kills}
-                                deaths={match.deaths ?? match.player_deaths}
-                                assists={match.assists ?? match.player_assists}
-                                durationS={match.duration_s ?? match.match_duration_s}
-                            />
-                        ))}
-                    </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <Card
+                    title="Recent Matches"
+                    icon={Gamepad2}
+                    description={
+                        matchHistory && matchHistory.matches.length > 0
+                            ? `Last ${Math.min(matchHistory.matches.length, 8)} matches`
+                            : undefined
+                    }
+                >
+                    {matchHistory && matchHistory.matches.length > 0 ? (
+                        <div className="space-y-2">
+                            {matchHistory.matches.slice(0, 8).map((match) => (
+                                <MatchRow
+                                    key={match.match_id}
+                                    matchId={match.match_id}
+                                    heroId={match.hero_id}
+                                    outcome={match.match_outcome ?? (match.match_result === 1 ? 'Win' : 'Loss')}
+                                    kills={match.kills ?? match.player_kills}
+                                    deaths={match.deaths ?? match.player_deaths}
+                                    assists={match.assists ?? match.player_assists}
+                                    durationS={match.duration_s ?? match.match_duration_s}
+                                    startTime={match.start_time}
+                                    compact
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-text-secondary">
+                            <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No recent matches</p>
+                        </div>
+                    )}
                 </Card>
-            )}
 
-            {topHeroes.length > 0 && (
-                <Card title="Top Heroes" icon={Target}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {topHeroes.map((hero) => {
-                            const rate = (hero.win_rate || 0) * 100
-                            return (
-                                <div
-                                    key={hero.hero_id}
-                                    className="flex items-center justify-between p-3 bg-bg-tertiary rounded-sm"
-                                >
-                                    <span className="font-medium">{hero.hero_name ?? heroName(hero.hero_id)}</span>
-                                    <div className="flex items-center gap-3 text-sm">
-                                        <span className="text-text-secondary">{hero.matches_played} games</span>
-                                        <span className={winRateClass(rate)}>{rate.toFixed(0)}%</span>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                {/* Equal-height pairing with Recent Matches: the scroll region is
+                    absolutely positioned, so the hero list contributes no intrinsic
+                    height to the grid row. Recent Matches sets the row height and
+                    this card stretches to it (grid default). Below xl (single
+                    column) there is no row to inherit, so the region gets a fixed
+                    height instead. */}
+                <Card
+                    title="Hero Performance"
+                    icon={Target}
+                    description={heroes.length > 0 ? `${heroes.length} heroes played` : undefined}
+                    className="flex flex-col"
+                    contentClassName="flex-1 min-h-0"
+                    action={
+                        heroes.length > 0 ? (
+                            // pr-6 lines these up with the row columns: the body
+                            // is inset 24px further than the header (scroll pr-1 +
+                            // 10px scrollbar gutter + 10px row padding).
+                            <div className="flex items-center gap-4 pr-6 text-[11px] uppercase tracking-wider text-text-secondary">
+                                <span className="w-14 text-right">Games</span>
+                                <span className="w-14 text-right">Win %</span>
+                                <span className="w-14 text-right hidden sm:block">KDA</span>
+                            </div>
+                        ) : undefined
+                    }
+                >
+                    {heroes.length > 0 ? (
+                        <div className="relative h-[26rem] xl:h-full xl:min-h-48">
+                            <div className="absolute inset-0 space-y-2 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+                                {heroes.map((hero) => {
+                                    const rate = (hero.win_rate || 0) * 100
+                                    return (
+                                        <div
+                                            key={hero.hero_id}
+                                            className="flex items-center gap-3 p-2.5 bg-bg-tertiary rounded-sm"
+                                        >
+                                            <HeroChip heroId={hero.hero_id} size="md" />
+                                            <span className="font-medium w-28 truncate shrink-0">
+                                                {heroName(hero.hero_id)}
+                                            </span>
+                                            {/* Win-rate bar: instant visual scan across the roster */}
+                                            <div className="flex-1 h-1.5 bg-bg-primary rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full ${rate >= 50 ? 'bg-green-400/70' : 'bg-red-400/60'}`}
+                                                    style={{ width: `${Math.min(rate, 100)}%` }}
+                                                />
+                                            </div>
+                                            <div className="flex items-center gap-4 text-sm shrink-0 tabular-nums">
+                                                <span className="text-text-secondary w-14 text-right">
+                                                    {hero.matches_played}
+                                                </span>
+                                                <span className={`w-14 text-right ${winRateClass(rate)}`}>
+                                                    {rate.toFixed(0)}%
+                                                </span>
+                                                <span className="text-text-secondary w-14 text-right font-mono hidden sm:block">
+                                                    {(hero.kda || 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-text-secondary">
+                            <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No hero stats available</p>
+                        </div>
+                    )}
                 </Card>
-            )}
+            </div>
         </div>
     )
 }

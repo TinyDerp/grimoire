@@ -469,6 +469,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getPlayerMMR', accountIds),
         getPlayerMMRHistory: (accountId: number) =>
             ipcRenderer.invoke('stats:getPlayerMMRHistory', accountId),
+        getHeroes: () => ipcRenderer.invoke('stats:getHeroes'),
+        getRanks: () => ipcRenderer.invoke('stats:getRanks'),
         getPlayerHeroStats: (accountId: number) =>
             ipcRenderer.invoke('stats:getPlayerHeroStats', accountId),
         getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) =>
