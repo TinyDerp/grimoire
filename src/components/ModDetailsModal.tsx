@@ -161,9 +161,18 @@ function ModDetailsModal({
   const [deleteCandidate, setDeleteCandidate] = useState<{ modId: string; fileName: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
 
+  // Default the archived section open when the file you currently have installed
+  // lives there. That's the common update case: an author archives the old
+  // version and uploads a new current file, so your installed file drops into
+  // the (collapsed) archived list while the new "Update" target shows above.
+  // Leaving it collapsed hid which row you actually have, giving no anchor for
+  // what you're replacing.
+  const installedFileIsArchived = (mod.files ?? []).some(
+    (f) => f.isArchived && installedFileIds.has(f.id),
+  );
   useEffect(() => {
-    setArchivedFilesOpen(false);
-  }, [mod.id]);
+    setArchivedFilesOpen(installedFileIsArchived);
+  }, [mod.id, installedFileIsArchived]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1455,6 +1464,11 @@ function ModDetailsModal({
                               <ChevronRight className="w-4 h-4 flex-shrink-0" />
                             )}
                             <span className="font-medium truncate">Archived files</span>
+                            {installedFileIsArchived && (
+                              <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+                                Your version
+                              </span>
+                            )}
                           </span>
                           <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
                             ({archivedFiles.length})
