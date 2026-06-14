@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
 import SyncIndicator from './SyncIndicator';
 import DownloadQueueIndicator from './DownloadQueueIndicator';
+import AppUpdateBanner from './AppUpdateBanner';
 import { Button } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import { ToastStack } from './common/ToastStack';
@@ -216,6 +217,7 @@ export default function Layout() {
             </div>
           </div>
         )}
+        <AppUpdateBanner />
         <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in">
           <Outlet />
         </div>
