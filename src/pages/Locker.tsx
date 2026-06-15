@@ -16,7 +16,9 @@ import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 
 // Heavy (three.js): only pulled in when the soul-container type is viewed.
-const SoulContainerViewer = lazy(() => import('../components/locker/SoulContainerViewer'));
+import { SoulRegistryProvider } from '../components/locker/SoulRegistryProvider';
+const SoulContainerTile = lazy(() => import('../components/locker/SoulContainerTile'));
+const SoulContainerCanvas = lazy(() => import('../components/locker/SoulContainerCanvas'));
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
@@ -928,8 +930,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
   const activeType = groups[selectedType]?.length ? selectedType : available[0];
   const activeMods = activeType ? groups[activeType] : [];
   const total = GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0);
+  // The scrollable card pane: the shared soul-container canvas clamps each
+  // card's render rect to this element so models never bleed past the pane.
+  const paneRef = useRef<HTMLDivElement>(null);
 
   return (
+    <SoulRegistryProvider>
     <div className="relative flex h-full overflow-hidden">
       {/* Background art (Deadlock environment), full-bleed behind both panels.
           A moderate overlay keeps the right-pane cards legible; the bottom
@@ -1041,7 +1047,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
       </div>
 
       {/* Right pane: the selected type's mods as cards */}
-      <div className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
+      <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
         <div className="space-y-4 p-6">
           {activeType ? (
             <>
@@ -1109,7 +1115,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                             GameBanana thumbnail. */}
                         {activeType === 'soul-container' ? (
                           <Suspense fallback={null}>
-                            <SoulContainerViewer modKey={mod.metaKey} />
+                            <SoulContainerTile modKey={mod.metaKey} />
                           </Suspense>
                         ) : (
                           <div
@@ -1279,7 +1285,18 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
           </div>
         </>
       )}
+
+      {/* Shared 3D canvas for the Global soul-container grid: one WebGL context
+          renders every card (scissored into its on-screen rect), so the grid
+          can't exhaust the browser's live-context cap. Only mounted while that
+          type is selected. */}
+      {activeType === 'soul-container' && (
+        <Suspense fallback={null}>
+          <SoulContainerCanvas paneRef={paneRef} />
+        </Suspense>
+      )}
     </div>
+    </SoulRegistryProvider>
   );
 }
 
