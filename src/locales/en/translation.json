@@ -586,7 +586,9 @@
         "statsLabel_one": "{{count}} mesh · {{verts}} verts · span {{span}}",
         "statsLabel_other": "{{count}} meshes · {{verts}} verts · span {{span}}",
         "orientationLabel": "Orientation:",
-        "vanillaShell": "Vanilla shell"
+        "vanillaShell": "Vanilla shell",
+        "shuffleBackdrop": "Shuffle background",
+        "highPolyWarning": "This model has {{count}} triangles, well above the {{threshold}} a soul container usually needs. It will still build, but a very heavy model can hurt in-game performance."
       },
       "fields": {
         "name": "Name",
@@ -608,7 +610,11 @@
         "rotatePlus": "Rotate {{axis}} plus 90",
         "axisDegrees": "{{axis}} degrees",
         "deg": "deg",
-        "flipVertical": "Flip vertical"
+        "flipVertical": "Flip vertical",
+        "tiltUp": "Tilt up",
+        "tiltDown": "Tilt down",
+        "turnLeft": "Turn left",
+        "turnRight": "Turn right"
       },
       "glow": {
         "label": "Soul glow",
@@ -622,9 +628,9 @@
       },
       "conflict": {
         "heading": "A soul container is already enabled",
-        "body": "Only one soul container can be active at a time (they override the same model). Choose what to do with “{{name}}”:",
-        "replace": "Replace it",
-        "addNew": "Add as new (both enabled)"
+        "body": "Only one soul container loads in-game at a time (they override the same model). Choose what to do with “{{name}}”:",
+        "disableCurrent": "Disable the current one",
+        "keepBoth": "Keep both enabled"
       },
       "errors": {
         "noMeshGeometry": "GLB preview loaded, but it has no mesh geometry.",

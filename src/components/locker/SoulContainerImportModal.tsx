@@ -5,18 +5,26 @@ import type { TFunction } from 'i18next';
 import * as THREE from 'three';
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Boxes,
   Loader2,
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Shuffle,
   UploadCloud,
   X,
 } from 'lucide-react';
 import { importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
 import { parseGltfPreview } from '../../lib/loadGltfPreview';
+import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD } from '../../lib/soulImport';
+import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
 import SoulImportPreview from './SoulImportPreview';
+import { SOUL_BACKDROP_COUNT } from './soulBackdrops';
 import { disposeScene } from './soulModel';
 
 type SoulOrientMode = 'y-up' | 'z-up' | 'flip-y' | 'auto';
@@ -44,47 +52,25 @@ const GLOW_OPTIONS: { value: GlowMode; labelKey: string; hintKey: string }[] = [
   { value: 'off', labelKey: 'locker.soulImport.glow.off', hintKey: 'locker.soulImport.glow.offHint' },
 ];
 
-function deriveNameFromPath(path: string): string {
-  const base = path.split(/[\\/]/).pop() ?? path;
-  const stem = base.replace(/\.glb$/i, '');
-  return stem.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function norm360(deg: number): number {
-  return ((deg % 360) + 360) % 360;
-}
-
-function describeScene(scene: THREE.Object3D, t: TFunction): { meshCount: number; label: string } {
-  let meshCount = 0;
-  let vertexCount = 0;
-  const box = new THREE.Box3();
-  let hasBounds = false;
-
-  scene.updateMatrixWorld(true);
-  scene.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    meshCount += 1;
-    const position = mesh.geometry?.attributes?.position;
-    vertexCount += position?.count ?? 0;
-    const meshBox = new THREE.Box3().setFromObject(mesh);
-    if (!meshBox.isEmpty()) {
-      if (hasBounds) box.union(meshBox);
-      else box.copy(meshBox);
-      hasBounds = true;
-    }
-  });
-
-  if (!meshCount || !hasBounds) return { meshCount, label: t('locker.soulImport.preview.noMeshGeometry') };
-
-  const size = box.getSize(new THREE.Vector3());
-  const span = Math.max(size.x, size.y, size.z);
+function describeScene(
+  scene: THREE.Object3D,
+  t: TFunction
+): { meshCount: number; triangleCount: number; label: string } {
+  const stats = computeSceneStats(scene);
+  if (!stats.meshCount || !stats.hasBounds) {
+    return {
+      meshCount: stats.meshCount,
+      triangleCount: stats.triangleCount,
+      label: t('locker.soulImport.preview.noMeshGeometry'),
+    };
+  }
   return {
-    meshCount,
+    meshCount: stats.meshCount,
+    triangleCount: stats.triangleCount,
     label: t('locker.soulImport.preview.statsLabel', {
-      count: meshCount,
-      verts: vertexCount.toLocaleString(),
-      span: span.toFixed(2),
+      count: stats.meshCount,
+      verts: stats.vertexCount.toLocaleString(),
+      span: stats.span.toFixed(2),
     }),
   };
 }
@@ -96,6 +82,7 @@ export default function SoulContainerImportModal({
   initialGlbPath = '',
 }: SoulContainerImportModalProps) {
   const { t } = useTranslation();
+  const toggleMod = useAppStore((s) => s.toggleMod);
   const [glbPath, setGlbPath] = useState<string>(initialGlbPath);
   const [name, setName] = useState<string>(initialGlbPath ? deriveNameFromPath(initialGlbPath) : '');
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
@@ -106,12 +93,20 @@ export default function SoulContainerImportModal({
   const [showVanilla, setShowVanilla] = useState(true);
   const [nsfw, setNsfw] = useState(false);
   const [notes, setNotes] = useState('');
-  const [replaceExisting, setReplaceExisting] = useState(true);
+  // When another soul container is already enabled, default to disabling it
+  // (single in-game slot) rather than overwriting it: the old one stays in the
+  // library, just turned off. The alternative keeps both enabled.
+  const [disableExisting, setDisableExisting] = useState(true);
+  // Random aesthetic backdrop baked behind the model in the preview + thumbnail.
+  const [backdropIndex, setBackdropIndex] = useState(() =>
+    Math.floor(Math.random() * SOUL_BACKDROP_COUNT)
+  );
   const [building, setBuilding] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [previewStats, setPreviewStats] = useState<string | null>(null);
+  const [triangleCount, setTriangleCount] = useState(0);
 
   const captureRef = useRef<(() => string | null) | null>(null);
   // Track the live scene so we can dispose its GPU resources on swap/unmount.
@@ -134,6 +129,7 @@ export default function SoulContainerImportModal({
     setError(null);
     setResolvedOrient(null);
     setPreviewStats(null);
+    setTriangleCount(0);
 
     const handle = window.setTimeout(() => {
       (async () => {
@@ -155,6 +151,7 @@ export default function SoulContainerImportModal({
           setResolvedOrient(preview.orient);
           const stats = describeScene(gltf.scene, t);
           setPreviewStats(stats.label);
+          setTriangleCount(stats.triangleCount);
           if (stats.meshCount === 0) setError(t('locker.soulImport.errors.noMeshGeometry'));
         } catch (err) {
           if (!cancelled) {
@@ -162,6 +159,7 @@ export default function SoulContainerImportModal({
             sceneRef.current = null;
             setScene(null);
             setPreviewStats(null);
+            setTriangleCount(0);
             setError(t('locker.soulImport.errors.previewFailed', { error: String(err) }));
           }
         } finally {
@@ -224,6 +222,15 @@ export default function SoulContainerImportModal({
     });
   };
 
+  const rerollBackdrop = () => {
+    setBackdropIndex((current) => {
+      if (SOUL_BACKDROP_COUNT <= 1) return current;
+      let next = current;
+      while (next === current) next = Math.floor(Math.random() * SOUL_BACKDROP_COUNT);
+      return next;
+    });
+  };
+
   const modeLabel = hasRotation
     ? resolvedOrient
       ? t('locker.soulImport.orient.customRotationResolved', { orient: resolvedOrient })
@@ -231,6 +238,7 @@ export default function SoulContainerImportModal({
     : (resolvedOrient ?? orientMode);
 
   const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building;
+  const highPoly = triangleCount > TRIANGLE_WARN_THRESHOLD;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -238,10 +246,6 @@ export default function SoulContainerImportModal({
     setError(null);
     try {
       const thumbnailDataUrl = captureRef.current?.() ?? undefined;
-      const replaceMetaKey =
-        replaceExisting && existingSoulImports.length > 0
-          ? existingSoulImports[0].metaKey
-          : undefined;
       const mods = await importSoulContainerGlb({
         glbPath,
         name: name.trim(),
@@ -252,8 +256,15 @@ export default function SoulContainerImportModal({
         notes: notes.trim() || undefined,
         nsfw,
         thumbnailDataUrl,
-        replaceMetaKey,
       });
+      // The new import lands enabled. When the user chose to disable the old
+      // one (single in-game slot), turn off the previously enabled containers;
+      // they stay in the library, just off. "Keep both" skips this.
+      if (disableExisting) {
+        for (const existing of existingSoulImports) {
+          if (existing.enabled) await toggleMod(existing.id);
+        }
+      }
       onImported(mods);
       onClose();
     } catch (err) {
@@ -326,6 +337,7 @@ export default function SoulContainerImportModal({
                     orientMode="y-up"
                     rotate={[0, 0, 0]}
                     showVanilla={showVanilla}
+                    backdropIndex={backdropIndex}
                     captureRef={captureRef}
                   />
                 </Suspense>
@@ -343,26 +355,77 @@ export default function SoulContainerImportModal({
                 <>
                   {previewStats && (
                     <span
-                      className="absolute top-2 left-2 max-w-[calc(100%-1rem)] truncate px-2 py-0.5 rounded bg-black/50 text-[11px] text-text-secondary"
+                      className="absolute top-2 left-2 z-10 max-w-[60%] truncate px-2 py-0.5 rounded bg-black/50 text-[11px] text-text-secondary"
                       title={previewStats}
                     >
                       {previewStats}
                     </span>
                   )}
-                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px]">
-                  <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary">
-                    {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
-                  </span>
-                  <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={showVanilla}
-                      onChange={(e) => setShowVanilla(e.target.checked)}
-                      className="w-3 h-3 accent-accent cursor-pointer"
-                    />
-                    {t('locker.soulImport.preview.vanillaShell')}
-                  </label>
-                </div>
+
+                  {/* Top-right: vanilla shell toggle + backdrop reroll. */}
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[11px]">
+                    <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={showVanilla}
+                        onChange={(e) => setShowVanilla(e.target.checked)}
+                        className="w-3 h-3 accent-accent cursor-pointer"
+                      />
+                      {t('locker.soulImport.preview.vanillaShell')}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={rerollBackdrop}
+                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                      title={t('locker.soulImport.preview.shuffleBackdrop')}
+                      aria-label={t('locker.soulImport.preview.shuffleBackdrop')}
+                    >
+                      <Shuffle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Directional arrows over the preview for quick visual
+                      reorientation (quarter turns; pitch on X, yaw on Y). Each
+                      tweaks rotate and rebuilds, like the side-panel nudges. */}
+                  <button
+                    type="button"
+                    onClick={() => bumpAxis(0, 90)}
+                    className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.tiltUp')}
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bumpAxis(0, -90)}
+                    className="absolute bottom-9 left-1/2 -translate-x-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.tiltDown')}
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bumpAxis(1, -90)}
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.turnLeft')}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bumpAxis(1, 90)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
+                    aria-label={t('locker.soulImport.orient.turnRight')}
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  {/* Bottom: resolved orientation label. */}
+                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center text-[11px]">
+                    <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary">
+                      {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
+                    </span>
+                  </div>
                 </>
               )}
             </div>
@@ -511,26 +574,38 @@ export default function SoulContainerImportModal({
               </p>
               <div className="flex gap-1.5">
                 <button
-                  onClick={() => setReplaceExisting(true)}
+                  onClick={() => setDisableExisting(true)}
                   className={`flex-1 px-2 py-1 rounded border text-xs cursor-pointer ${
-                    replaceExisting
+                    disableExisting
                       ? 'border-accent/60 bg-accent/15 text-text-primary'
                       : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                   }`}
                 >
-                  {t('locker.soulImport.conflict.replace')}
+                  {t('locker.soulImport.conflict.disableCurrent')}
                 </button>
                 <button
-                  onClick={() => setReplaceExisting(false)}
+                  onClick={() => setDisableExisting(false)}
                   className={`flex-1 px-2 py-1 rounded border text-xs cursor-pointer ${
-                    !replaceExisting
+                    !disableExisting
                       ? 'border-accent/60 bg-accent/15 text-text-primary'
                       : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                   }`}
                 >
-                  {t('locker.soulImport.conflict.addNew')}
+                  {t('locker.soulImport.conflict.keepBoth')}
                 </button>
               </div>
+            </div>
+          )}
+
+          {highPoly && (
+            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+              <span>
+                {t('locker.soulImport.preview.highPolyWarning', {
+                  count: triangleCount.toLocaleString(),
+                  threshold: TRIANGLE_WARN_THRESHOLD.toLocaleString(),
+                })}
+              </span>
             </div>
           )}
 

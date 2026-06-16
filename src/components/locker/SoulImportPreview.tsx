@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { makeBackdropTexture } from './soulBackdrops';
 
 /**
  * Live 3D preview for the Soul Container import.
@@ -19,7 +20,22 @@ export const SOUL_TARGET_SPAN = 12.65;
 
 const SPIN_RATE = 0.35; // rad/sec
 const CAMERA_DISTANCE = SOUL_TARGET_SPAN * 3.0;
+// Saved thumbnails freeze to this 3/4 yaw (instead of a random spin frame) so
+// every card reads from a consistent, flattering angle.
+const CAPTURE_YAW = -Math.PI * 0.18;
 type SoulOrientMode = 'y-up' | 'z-up' | 'flip-y' | 'auto';
+
+/**
+ * Attaches the chosen backdrop as the scene background (declaratively, so r3f
+ * restores the previous value on unmount). Disposes the texture on change.
+ * A negative index renders nothing (transparent).
+ */
+function Backdrop({ index }: { index: number }) {
+  const texture = useMemo(() => makeBackdropTexture(index), [index]);
+  useEffect(() => () => texture?.dispose(), [texture]);
+  if (!texture) return null;
+  return <primitive object={texture} attach="background" />;
+}
 
 function makeMaterialPreviewSafe(material: THREE.Material): void {
   material.side = THREE.DoubleSide;
@@ -182,18 +198,34 @@ function PreviewScene({
   captureRef?: MutableRefObject<(() => string | null) | null>;
 }) {
   const spinGroup = useRef<THREE.Group>(null);
+  const vanillaRef = useRef<THREE.Group>(null);
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   const camera = useThree((s) => s.camera);
 
   useEffect(() => {
     if (!captureRef) return;
+    // The saved thumbnail freezes to a fixed angle and drops the orange vanilla
+    // reference (a sizing aid, not part of the model), then restores the live
+    // spin/visibility so the preview keeps animating.
     captureRef.current = () => {
+      const group = spinGroup.current;
+      const vanilla = vanillaRef.current;
+      const prevYaw = group ? group.rotation.y : 0;
+      const prevVanillaVisible = vanilla ? vanilla.visible : false;
       try {
+        if (group) {
+          group.rotation.y = CAPTURE_YAW;
+          group.updateMatrixWorld(true);
+        }
+        if (vanilla) vanilla.visible = false;
         gl.render(scene, camera);
         return gl.domElement.toDataURL('image/png');
       } catch {
         return null;
+      } finally {
+        if (group) group.rotation.y = prevYaw;
+        if (vanilla) vanilla.visible = prevVanillaVisible;
       }
     };
     return () => {
@@ -215,7 +247,11 @@ function PreviewScene({
           </group>
         </group>
       </group>
-      {showVanilla && <VanillaReference />}
+      {showVanilla && (
+        <group ref={vanillaRef}>
+          <VanillaReference />
+        </group>
+      )}
     </group>
   );
 }
@@ -225,6 +261,7 @@ export default function SoulImportPreview({
   orientMode,
   rotate,
   showVanilla,
+  backdropIndex = -1,
   captureRef,
 }: {
   /** The selected source GLB scene. */
@@ -232,6 +269,8 @@ export default function SoulImportPreview({
   orientMode: SoulOrientMode;
   rotate: [number, number, number];
   showVanilla: boolean;
+  /** Index into SOUL_BACKDROPS for the baked background; < 0 for none. */
+  backdropIndex?: number;
   captureRef?: MutableRefObject<(() => string | null) | null>;
 }) {
   useLayoutEffect(() => {
@@ -250,9 +289,12 @@ export default function SoulImportPreview({
       dpr={[1, 2]}
     >
       <PreviewCamera />
-      <ambientLight intensity={0.75} />
+      <Backdrop index={backdropIndex} />
+      <ambientLight intensity={0.7} />
       <directionalLight position={[3, 5, 2]} intensity={1.3} />
       <directionalLight position={[-3, 2, -2]} intensity={0.5} />
+      {/* Faint accent rim from below/behind for a subtle soul glow. */}
+      <pointLight position={[0, -SOUL_TARGET_SPAN, -SOUL_TARGET_SPAN]} intensity={0.6} color="#f97316" />
       <PreviewScene sourceScene={scene} fit={fit} showVanilla={showVanilla} captureRef={captureRef} />
     </Canvas>
   );
