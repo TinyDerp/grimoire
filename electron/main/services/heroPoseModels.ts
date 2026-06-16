@@ -156,8 +156,16 @@ function modelFile(key: string): string {
  *
  * v4: Rem now pins `familiar_wip.vmdl_c`; old cached Familiar GLBs targeted
  * `familiar.vmdl_c`, whose rendered vertices are all pelvis-weighted.
+ *
+ * v5: glb.rs material-export fixes (roughness from the normal texture's BLUE
+ * channel not its constant alpha, normal-Z reconstruction, and constant
+ * metalness/roughness/color-tint fallbacks), so PBR reads correctly under the
+ * new IBL. Old GLBs baked fully-rough/matte surfaces; forces a re-export.
+ *
+ * v6: sheen now reads TextureSheenColor1 * tint and binds the g_tSheen texture
+ * (was white sheen on most cloth), and glass honors the authored g_flIOR.
  */
-const POSE_CACHE_VERSION = '4';
+const POSE_CACHE_VERSION = '6';
 
 const POSE_VERSION_FILENAME = '.cache-version';
 

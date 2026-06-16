@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { HDRCubeTextureLoader } from 'three/examples/jsm/loaders/HDRCubeTextureLoader.js';
 import { Loader2 } from 'lucide-react';
+import { getAssetPath } from '../../lib/assetPath';
 import { getHeroPoseInfo, exportHeroPose, previewTrippySprite } from '../../lib/api';
 import { loadGltfPreview } from '../../lib/loadGltfPreview';
 import type { HeroPoseSkinSource } from '../../types/portrait';
@@ -24,6 +26,20 @@ import type { TrippyPreview } from '../../stores/trippyPreviewStore';
  */
 
 const HERO_POSE_SCHEME = 'grimoire-hero';
+
+// Six faces of a real Deadlock skybox IBL probe (the overcast probe: bright and
+// neutral, not the moody dusk one), baked from the game's HDR cubemap to Radiance
+// .hdr by `vpkmerge cubemap`. Order is the loader's expected [+X, -X, +Y, -Y, +Z,
+// -Z]. Image-based lighting from this makes metallic and glossy surfaces read like
+// in-game instead of dead-flat under bare directionals.
+const IBL_FACES = [
+  getAssetPath('/ibl/px.hdr'),
+  getAssetPath('/ibl/nx.hdr'),
+  getAssetPath('/ibl/py.hdr'),
+  getAssetPath('/ibl/ny.hdr'),
+  getAssetPath('/ibl/pz.hdr'),
+  getAssetPath('/ibl/nz.hdr'),
+];
 
 function meshUrlFor(key: string, mtimeMs: number | null): string {
   // The key contains `::` (and a `/` for overflow skins), which a standard
@@ -67,6 +83,26 @@ function PosedModel({ scene }: { scene: THREE.Object3D }) {
     return { scale, center };
   }, [scene]);
 
+  // Deadlock skin meshes bake skin tone / accents into a per-vertex COLOR stream;
+  // the exporter only keeps that stream on materials the engine actually reads it
+  // for, so wherever the attribute is present we should let it multiply through.
+  // Without this the affected faces render flat white. (A later pass can gate this
+  // on userData.morphic flags for full correctness.)
+  useEffect(() => {
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry?.attributes.color) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const sm = m as THREE.MeshStandardMaterial;
+        if (sm && !sm.vertexColors) {
+          sm.vertexColors = true;
+          sm.needsUpdate = true;
+        }
+      }
+    });
+  }, [scene]);
+
   useFrame((_, delta) => {
     if (groupRef.current) groupRef.current.rotation.y += delta * 0.25;
   });
@@ -102,6 +138,40 @@ function Controls() {
   // after a drag never runs (and on some three builds the orbit barely tracks).
   // The frame loop is already alive from PosedModel's turntable useFrame.
   useFrame(() => controlsRef.current?.update());
+  return null;
+}
+
+/** Image-based lighting from the baked Deadlock dusk probe. Loads the six .hdr
+ *  faces once, runs them through PMREM, and assigns the result as
+ *  `scene.environment` so every MeshStandardMaterial gets real reflections and
+ *  ambient instead of dead-flat directional-only shading. The PMREM target is
+ *  bound to this Canvas's GL context, so it is generated per-mount (the per-hero
+ *  view shows a single viewer); SoulContainerViewer would want a shared probe. */
+function Environment() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    let disposed = false;
+    const pmrem = new THREE.PMREMGenerator(gl);
+    let envRT: THREE.WebGLRenderTarget | null = null;
+    new HDRCubeTextureLoader()
+      .setDataType(THREE.HalfFloatType)
+      .load(IBL_FACES, (cube) => {
+        if (disposed) {
+          cube.dispose();
+          pmrem.dispose();
+          return;
+        }
+        envRT = pmrem.fromCubemap(cube);
+        scene.environment = envRT.texture;
+        cube.dispose();
+        pmrem.dispose();
+      });
+    return () => {
+      disposed = true;
+      scene.environment = null;
+      envRT?.dispose();
+    };
+  }, [gl, scene]);
   return null;
 }
 
@@ -340,10 +410,22 @@ export default function HeroPoseViewer({
 
   return (
     <div className="absolute inset-0">
-      <Canvas camera={{ position: [0, 0, 3.2], fov: 40 }} dpr={[1, 2]} gl={{ alpha: true }}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[3, 5, 4]} intensity={1.4} />
-        <directionalLight position={[-4, 2, -3]} intensity={0.6} />
+      <Canvas
+        camera={{ position: [0, 0, 3.2], fov: 40 }}
+        dpr={[1, 2]}
+        gl={{
+          alpha: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 0.8,
+        }}
+      >
+        {/* The IBL probe supplies ambient + reflections, so the bare ambientLight
+            is gone and the directionals are softened to a warm key + cool fill
+            that just shapes the form on top of the environment. */}
+        <Environment />
+        <ambientLight intensity={0.12} />
+        <directionalLight position={[3, 5, 4]} intensity={1.1} color="#fff3e0" />
+        <directionalLight position={[-4, 2, -3]} intensity={0.4} color="#cfe0ff" />
         <PosedModel scene={scene} />
         {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
         <Controls />
