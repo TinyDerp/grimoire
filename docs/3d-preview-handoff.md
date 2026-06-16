@@ -7,14 +7,24 @@ materials, and animated rig). The deep research + phased roadmap live in
 
 Last updated: 2026-06-16.
 
+## PRs open
+
+Both branches are pushed and have open PRs (cross-repo from the `oldreceipt`
+forks into `Slush97:main`; `oldreceipt` has read-only access to the Slush97
+repos, so contribution goes through forks). Merge vpkmerge first, then rebuild
+its release binary so grimoire's dev build picks it up.
+
+- vpkmerge: https://github.com/Slush97/vpkmerge/pull/23
+- grimoire: https://github.com/Slush97/grimoire/pull/187
+
 ## TL;DR
 
 The Locker 3D preview now renders the static menu pose lit like in-game: a real
 Deadlock IBL probe (image-based lighting) + filmic tonemapping + corrected PBR
 materials (roughness/metalness/sheen/glass), on a turntable that pauses while you
 hold it. An animated skinned-rig path is fully built but **flagged off** pending
-better idle animation. All work is committed on feature branches; nothing pushed,
-no PRs.
+better idle animation. All work is committed on feature branches and now has open
+PRs (see "PRs open" below).
 
 ## Repos, branches, commits
 
