@@ -9,8 +9,10 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
-  Boxes,
+  Ghost,
   Loader2,
+  Pause,
+  Play,
   RefreshCw,
   RotateCcw,
   RotateCw,
@@ -91,6 +93,7 @@ export default function SoulContainerImportModal({
   const [resolvedOrient, setResolvedOrient] = useState<string | null>(null);
   const [glow, setGlow] = useState<GlowMode>('recolor');
   const [showVanilla, setShowVanilla] = useState(true);
+  const [spinning, setSpinning] = useState(true);
   const [nsfw, setNsfw] = useState(false);
   const [notes, setNotes] = useState('');
   // When another soul container is already enabled, default to disabling it
@@ -278,7 +281,7 @@ export default function SoulContainerImportModal({
       <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <Boxes className="w-5 h-5" />
+            <Ghost className="w-5 h-5" />
             {t('locker.soulImport.title')}
           </h3>
           <button
@@ -291,45 +294,50 @@ export default function SoulContainerImportModal({
         </div>
 
         <div className="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Left: drop zone + live preview */}
-          <div className="space-y-3">
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label={glbPath ? t('locker.soulImport.dropzone.ariaSelected', { path: glbPath }) : t('locker.soulImport.dropzone.ariaBrowse')}
-              onClick={pickGlb}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  void pickGlb();
-                }
-              }}
-              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragActive(true); }}
-              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
-              onDrop={handleDrop}
-              className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                dragActive
-                  ? 'border-accent bg-accent/10'
-                  : glbPath
-                    ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
-                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
-              }`}
-            >
-              <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
-              {glbPath ? (
-                <span className="text-sm text-text-primary font-medium truncate max-w-full">
-                  {glbPath.split(/[\\/]/).pop()}
-                </span>
-              ) : (
-                <span className="text-sm text-text-primary font-medium">
-                  {t('locker.soulImport.dropzone.prompt')}
-                </span>
-              )}
+          {/* Left: source picker + live preview */}
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">
+                {t('locker.soulImport.fields.source')}
+              </label>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={glbPath ? t('locker.soulImport.dropzone.ariaSelected', { path: glbPath }) : t('locker.soulImport.dropzone.ariaBrowse')}
+                onClick={pickGlb}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void pickGlb();
+                  }
+                }}
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setDragActive(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
+                onDrop={handleDrop}
+                className={`flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                  dragActive
+                    ? 'border-accent bg-accent/10'
+                    : glbPath
+                      ? 'border-accent/40 bg-bg-tertiary/60 cursor-pointer hover:bg-bg-tertiary'
+                      : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+                }`}
+              >
+                <UploadCloud className="w-5 h-5 text-text-secondary" aria-hidden />
+                {glbPath ? (
+                  <span className="text-sm text-text-primary font-medium truncate max-w-full">
+                    {glbPath.split(/[\\/]/).pop()}
+                  </span>
+                ) : (
+                  <span className="text-sm text-text-primary font-medium">
+                    {t('locker.soulImport.dropzone.prompt')}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Preview surface */}
-            <div className="relative aspect-square w-full rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
+            <div className="relative w-full flex-1 min-h-[16rem] rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
               {scene ? (
                 <Suspense fallback={null}>
                   <SoulImportPreview
@@ -337,13 +345,19 @@ export default function SoulContainerImportModal({
                     orientMode="y-up"
                     rotate={[0, 0, 0]}
                     showVanilla={showVanilla}
+                    spinning={spinning}
                     backdropIndex={backdropIndex}
                     captureRef={captureRef}
                   />
                 </Suspense>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-xs text-text-secondary px-6 text-center">
-                  {glbPath ? '' : t('locker.soulImport.dropzone.previewEmpty')}
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs text-text-secondary">
+                  {!glbPath && (
+                    <>
+                      <Ghost className="w-8 h-8 text-text-secondary/40" aria-hidden />
+                      <span>{t('locker.soulImport.dropzone.previewEmpty')}</span>
+                    </>
+                  )}
                 </div>
               )}
               {building && (
@@ -373,6 +387,15 @@ export default function SoulContainerImportModal({
                       />
                       {t('locker.soulImport.preview.vanillaShell')}
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => setSpinning((s) => !s)}
+                      className="p-1 rounded bg-black/50 text-text-secondary hover:text-text-primary cursor-pointer"
+                      title={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
+                      aria-label={spinning ? t('locker.soulImport.preview.pause') : t('locker.soulImport.preview.play')}
+                    >
+                      {spinning ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    </button>
                     <button
                       type="button"
                       onClick={rerollBackdrop}
@@ -531,9 +554,6 @@ export default function SoulContainerImportModal({
                   </button>
                 ))}
               </div>
-              <p className="mt-1 text-[11px] text-text-secondary">
-                {t('locker.soulImport.glow.notShownHint')}
-              </p>
             </div>
 
             <div>
@@ -561,42 +581,9 @@ export default function SoulContainerImportModal({
           </div>
         </div>
 
-        {/* Conflict notice + error, full width above the footer */}
+        {/* High-poly + error notices, full width above the footer. The
+            "already enabled" conflict toast lives in the footer row itself. */}
         <div className="px-5 space-y-3">
-          {existingSoulImports.length > 0 && (
-            <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2 font-medium">
-                <AlertTriangle className="w-4 h-4" />
-                {t('locker.soulImport.conflict.heading')}
-              </div>
-              <p className="text-xs text-amber-200/90">
-                {t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => setDisableExisting(true)}
-                  className={`flex-1 px-2 py-1 rounded border text-xs cursor-pointer ${
-                    disableExisting
-                      ? 'border-accent/60 bg-accent/15 text-text-primary'
-                      : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
-                  }`}
-                >
-                  {t('locker.soulImport.conflict.disableCurrent')}
-                </button>
-                <button
-                  onClick={() => setDisableExisting(false)}
-                  className={`flex-1 px-2 py-1 rounded border text-xs cursor-pointer ${
-                    !disableExisting
-                      ? 'border-accent/60 bg-accent/15 text-text-primary'
-                      : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
-                  }`}
-                >
-                  {t('locker.soulImport.conflict.keepBoth')}
-                </button>
-              </div>
-            </div>
-          )}
-
           {highPoly && (
             <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
@@ -616,22 +603,57 @@ export default function SoulContainerImportModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-5 border-t border-border mt-3">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {t('common.actions.cancel')}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {t('locker.soulImport.submit')}
-          </button>
+        <div className="flex items-center gap-3 p-5 border-t border-border mt-3">
+          {/* "Already enabled" conflict toast, inline on the left of the bottom
+              bar; the action buttons stay pinned right via ml-auto. */}
+          {existingSoulImports.length > 0 && (
+            <div
+              className="flex min-w-0 items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
+              title={t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
+            >
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate text-amber-200/90">{t('locker.soulImport.conflict.heading')}</span>
+              <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
+                <button
+                  onClick={() => setDisableExisting(true)}
+                  className={`px-2.5 py-1 text-[11px] cursor-pointer transition-colors ${
+                    disableExisting
+                      ? 'bg-accent/25 text-text-primary'
+                      : 'text-amber-200/70 hover:bg-amber-500/10'
+                  }`}
+                >
+                  {t('locker.soulImport.conflict.disableCurrent')}
+                </button>
+                <button
+                  onClick={() => setDisableExisting(false)}
+                  className={`px-2.5 py-1 text-[11px] cursor-pointer border-l border-amber-500/40 transition-colors ${
+                    !disableExisting
+                      ? 'bg-accent/25 text-text-primary'
+                      : 'text-amber-200/70 hover:bg-amber-500/10'
+                  }`}
+                >
+                  {t('locker.soulImport.conflict.keepBoth')}
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 ml-auto shrink-0">
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.actions.cancel')}
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t('locker.soulImport.submit')}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
