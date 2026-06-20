@@ -5,8 +5,10 @@
 
   [![Website](https://img.shields.io/badge/grimoiremods.com-f97316)](https://grimoiremods.com)
   [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?label=release)](../../releases/latest)
+  [![Downloads](https://img.shields.io/github/downloads/Slush97/grimoire/total?label=downloads)](../../releases)
   [![AUR](https://img.shields.io/aur/version/grimoire-bin?label=aur)](https://aur.archlinux.org/packages/grimoire-bin)
   [![CI](https://img.shields.io/github/actions/workflow/status/Slush97/grimoire/ci.yml?branch=main&label=ci)](../../actions/workflows/ci.yml)
+  [![i18n](https://img.shields.io/badge/i18n-Weblate-2eccaa)](https://hosted.weblate.org/engage/grimoire/)
   [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A)](https://gamebanana.com/tools/22583)
   [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/KgYGHEMq2P)
   [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
