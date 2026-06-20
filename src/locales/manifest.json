@@ -3,6 +3,12 @@
   "totalKeys": 1669,
   "languages": [
     {
+      "code": "bg",
+      "name": "български",
+      "translatedKeys": 1610,
+      "pct": 96
+    },
+    {
       "code": "en",
       "name": "English",
       "translatedKeys": 1669,
@@ -13,6 +19,12 @@
       "name": "français",
       "translatedKeys": 1668,
       "pct": 100
+    },
+    {
+      "code": "ru",
+      "name": "русский",
+      "translatedKeys": 50,
+      "pct": 3
     }
   ]
 }
