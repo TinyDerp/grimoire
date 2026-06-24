@@ -49,10 +49,11 @@
     "emptyValue": "(vide)",
     "none": "Aucun",
     "versus": "VS",
-    "versusLower": "vs"
+    "versusLower": "vs",
+    "close": "Fermer"
   },
   "sync": {
-    "syncing": "Synchronisation {{section}} : {{percent}}%",
+    "syncing": "Synchronisation des {{section}} : {{percent}}%",
     "error": "Erreur synchronisation : {{section}}",
     "sections": {
       "Mod": "Mods",
@@ -96,10 +97,6 @@
       "back": "Tous les occultistes",
       "sections": "Sections de l'atelier",
       "abilityIcons": "Icônes de capacité et d'objet",
-      "buildTray": "Assemblage",
-      "buildTrayEmpty": "Préparez vos remplacements d'icônes, textures et sons ici, puis forgez-les en un seul mod pour {{hero}}. (Les recolorations sont directement sauvegardées dans leur propre mod local).",
-      "removeStaged": "Retirer",
-      "forge": "Forger le mod",
       "abilitiesSoon": {
         "title": "L'édition par capacité arrive bientôt",
         "body": "Cette vue regroupera chaque capacité dans une ligne avec son icône, sa couleur et son son en un seul endroit. Pour l'instant, recoloriez tous les effets de capacité en une fois sous Apparence, parcourez les icônes de capacité sous Icônes et Textures, et les sons de capacité sous Voix."
@@ -164,7 +161,6 @@
     },
     "sound": {
       "searchPlaceholder": "Rechercher des sons...",
-      "muteToggle": "Couper / réactiver l'écoute",
       "loading": "Lecture des sons depuis vos fichiers de jeu...",
       "play": "Écouter",
       "gameplayCount": "{{count}} sons en jeu",
@@ -190,6 +186,33 @@
         "empty": "Aucune ligne vocale ne correspond à votre recherche.",
         "count": "{{shown}} sur {{total}} lignes vocales",
         "capped": "Affichage des {{cap}} premières. Affinez votre recherche pour en voir plus."
+      },
+      "swap": {
+        "button": "Remplacer ce son par votre propre audio",
+        "buttonLabel": "Remplacer",
+        "title": "Remplacer par votre propre audio",
+        "drop": "Déposez un fichier MP3 ici, ou cliquez pour choisir",
+        "namePlaceholder": "Nom du mod",
+        "loop": "Écouter le clip remplacé en boucle",
+        "loopAuto": "Boucle : auto",
+        "loopOn": "Boucle : activée",
+        "loopOff": "Boucle : désactivée",
+        "forge": "Créer & installer",
+        "mp3only": "L'audio doit être un fichier MP3.",
+        "done": "\"{{name}}\" installé - activez-le dans l'onglet Installés",
+        "poolNote": "Remplace les {{count}} variations de ce son pour qu'il joue toujours votre audio.",
+        "singleNote": "Remplace ce son par votre audio."
+      },
+      "import": {
+        "decoding": "Lecture de l'audio en cours...",
+        "decodeError": "Impossible de lire ce fichier MP3 pour l'aperçu.",
+        "trimStart": "Début du découpage",
+        "trimEnd": "Fin du découpage",
+        "playSelection": "Écouter la sélection",
+        "resetTrim": "Utiliser tout le clip",
+        "reset": "Réinitialiser",
+        "matchVolume": "Faire correspondre au volume d'origine",
+        "matchUnavailable": "original indisponible"
       }
     }
   },
@@ -379,7 +402,7 @@
       "heroPerformance": "Performance d'occultiste",
       "heroesPlayed": "{{count}} occultistes joués",
       "games": "Parties",
-      "winPercent": "Victoires %",
+      "winPercent": "Victoires",
       "noHeroStatsAvailable": "Aucune statistique d'occultiste disponible"
     },
     "playerSelect": {
@@ -470,7 +493,7 @@
       "relayUnreachable": "Impossible de joindre le relais."
     },
     "filters": {
-      "allMaps": "Toutes les cartes",
+      "allMaps": "Toutes les maps",
       "allRegions": "Toutes les régions",
       "hasSpace": "Places disponibles",
       "searchPlaceholder": "Rechercher par nom ou carte"
@@ -680,7 +703,7 @@
       "hideNsfw": "Masquer le contenu NSFW",
       "hideNsfwDescription": "Flouter les vignettes des mods marqués comme NSFW.",
       "hideOutdated": "Masquer les mods obsolètes",
-      "expandLocker": "Développer les cartes du Casier par défaut",
+      "expandLocker": "Développer les listes du Casier par défaut",
       "switchVariants": "Désactiver les variantes au lieu de les empiler",
       "enableAfterDownload": "Activer les mods après le téléchargement",
       "confirmProfileUpdate": "Confirmer avant de mettre à jour un profil",
@@ -705,7 +728,7 @@
       "socialDescription": "Connectez-vous avec Steam pour publier des profils et parcourir les téléchargements d'autres joueurs dans Découvrir.",
       "fixUnknownMods": "Corriger les mods inconnus",
       "deadworksServers": "Serveurs Deadworks",
-      "performanceConfig": "Configuration performance",
+      "performanceConfig": "Config Performance",
       "foundry": "Forge"
     },
     "support": {
@@ -748,7 +771,7 @@
       "previewCleared": "{{size}} Effacé du cache d'aperçu.",
       "lastSynchronized": "Dernière synchronisation {{date}}",
       "neverSynchronized": "Jamais synchronisé",
-      "syncingSection": "Synchronisation de {{section}}",
+      "syncingSection": "Synchronisation des {{section}}",
       "cachedMods": "Mods en cache",
       "wipeCache": "Vider le cache",
       "syncDatabase": "Synchroniser base de données",
@@ -873,8 +896,8 @@
       "exitSelectionMode": "Quitter le mode de sélection",
       "selectMultiple": "Sélectionner plusieurs mods",
       "selectMultipleHint": "Sélectionner plusieurs mods pour une suppression, activation ou désactivation en masse",
-      "lockerOverrides": "Modifications du Casier",
-      "lockerOverridesHint": "Modifications du Casier : examiner et supprimer les cartes d'occultistes, les sons et les couleurs de capacité appliqués",
+      "lockerOverrides": "Remplacements du Casier",
+      "lockerOverridesHint": "Remplacements du Casier : examiner et supprimer les portraits d'occultistes, les sons et les couleurs de capacité appliqués",
       "authorPageNotFound": "Page de l'auteur de ce mod introuvable"
     },
     "filters": {
@@ -915,6 +938,10 @@
       "fixHiddenHint": "Corriger les inconnus est masqué. Clic droit pour le faire réapparaître.",
       "fixButtonHint": "Trouver des correspondances GameBanana ou ajouter des métadonnées personnalisées pour les mods locaux inconnus. Clic droit pour masquer ce bouton.",
       "fixButton": "Corriger les mods inconnus ({{count}})",
+      "dmmDetected": "Mods de Deadlock Mod Manager détectés, importation en cours...",
+      "dmmImported_one": "{{count}} mod détecté et importé depuis Deadlock Mod Manager",
+      "dmmImported_other": "{{count}} mods détectés et importés depuis Deadlock Mod Manager",
+      "dmmImportFailed": "Impossible d'importer les mods de Deadlock Mod Manager",
       "checkingCrcCache": "Vérification du cache CRC local...",
       "noCachedMatch": "Aucune correspondance en cache trouvée. Mis en file d'attente pour une recherche en ligne.",
       "missingMetadata": "Le mod correspondant n'a pas de métadonnées GameBanana",
@@ -1160,6 +1187,8 @@
       },
       "title": "Importer un conteneur d'âmes (GLB)",
       "submit": "Générer et importer",
+      "export": "Exporter en .vpk",
+      "exportTitle": "Créer le VPK et l'enregistrer sur le disque au lieu de l'installer dans Grimoire.",
       "dropzone": {
         "ariaBrowse": "Déposez un GLB ici ou appuyez sur Entrée pour parcourir",
         "ariaSelected": "GLB sélectionné : {{path}}. Appuyez sur Entrée pour modifier.",
@@ -1337,7 +1366,10 @@
       },
       "bakingHint": "Préparation... La première fois peut prendre un certain temps (Réencodage de chaque texture affectée) ; le même choix est instantané ensuite.",
       "restartHint": "Redémarrez Deadlock pour que ce changement prenne effet (les addons sont chargé au démarrage du jeu).",
-      "savedHint": "Enregistré. Ce choix sera chargé la prochaine fois que vous lancerez le jeu."
+      "savedHint": "Enregistré. Ce choix sera chargé la prochaine fois que vous lancerez le jeu.",
+      "exportVpk": "Exporter en .vpk",
+      "exportVpkTitle": "Intégrer cette apparence dans un VPK et l'enregistrer sur le disque au lieu de l'installer dans Grimoire.",
+      "exportSaved": "Exporté vers {{path}}"
     },
     "sounds": {
       "soundsByAbility": "Sons par capacité",
@@ -1365,7 +1397,7 @@
     "cards": {
       "heroCard": "Portrait d'Occultiste",
       "experimental": "Expérimental",
-      "intro": "Portrait trouvés dans vos mods installés. Chaque mod peut proposer plusieurs variantes de portrait ; cliquez sur un portrait pour appliquer l'ensemble complet de ce mod pour {{hero}}, et cliquez à nouveau sur le portrait pour rétablir par défaut.",
+      "intro": "Portraits trouvés dans vos mods installés. Chaque mod peut proposer plusieurs variantes de portrait ; cliquez sur un portrait pour appliquer l'ensemble complet de ce mod pour {{hero}}, et cliquez à nouveau sur le portrait pour rétablir par défaut.",
       "decodingPortraits": "Décodage des portraits...",
       "noCardArt": "Aucun portrait trouvé dans vos mods installés pour {{hero}}.",
       "applied": "Appliqué",
@@ -1374,8 +1406,8 @@
       "fileGroupTitle_one": "{{file}} · {{count}} portrait",
       "fileGroupTitle_other": "{{file}} · {{count}} portraits",
       "uploadYourOwn": "Importer les vôtres",
-      "slotCount_one": "{{count}} emplacement",
-      "slotCount_other": "{{count}} emplacements",
+      "slotCount_one": "{{count}} portrait",
+      "slotCount_other": "{{count}} portraits",
       "uploadInstructions": "Cliquez sur un emplacement pour choisir une image et la recadrer à la taille exacte de cette variante. Remplissez uniquement les variantes que vous souhaitez changer, puis appliquez. Les variantes non remplies restent par défaut.",
       "clearImage": "Effacer l'image",
       "clearVariantImage": "Effacer l'image de {{variant}}",
@@ -1401,7 +1433,7 @@
       "bodyGun": "Corps + Arme",
       "body": "Corps",
       "gun": "Arme",
-      "applyPaint": "Appliquer la peinture",
+      "applyPaint": "Appliquer peinture",
       "baking": "Préparation de la peinture. La première fois peut prendre un certain temps (Réencodage de chaque texture affectée) ; le même choix est instantané ensuite.",
       "restartRequired": "Redémarrez Deadlock pour que ce changement prenne effet (les addons sont chargés au démarrage du jeu).",
       "saved": "Enregistré. Cette peinture sera chargée la prochaine fois que vous lancerez le jeu."
@@ -1527,7 +1559,7 @@
     "hero": {
       "skins": "Skins",
       "sounds": "Sons",
-      "cards": "Cartes",
+      "cards": "Portraits",
       "effects": "Effets",
       "skinCount_one": "{{count}} skin",
       "skinCount_other": "{{count}} skins",
@@ -2347,10 +2379,10 @@
     "pitch": "Pitch (hauteur)",
     "db": "{{value}} dB",
     "saving": "Enregistrement...",
-    "title": "Remplacements du casier",
+    "title": "Remplacements du Casier",
     "subtitle": "Cosmétiques toujours actifs, séparés de votre ordre de chargement des mods et de la limite des 99 emplacements.",
     "tabs": {
-      "cards": "Cartes d'occultistes",
+      "cards": "Portraits d'occultistes",
       "sounds": "Sons de capacité",
       "colors": "Couleurs de capacité",
       "effects": "Skins psychédéliques"
@@ -2365,7 +2397,7 @@
     "addOrChange": "Ajouter ou modifier dans le Casier",
     "removeAll": "Tout retirer de {{scope}}",
     "scope": {
-      "cards": "cartes",
+      "cards": "portraits",
       "sounds": "sons",
       "colors": "couleurs",
       "trippySkins": "skins psychédéliques"
