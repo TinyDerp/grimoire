@@ -855,6 +855,10 @@ export interface ModConflict {
   ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
+  /** For `file` conflicts: every overlapping path still flagged for this pair
+   *  (after subtracting any individually ignored files). Undefined for
+   *  `priority` conflicts. */
+  files?: string[];
 }
 
 // Conflict detection re-parses every enabled VPK on the main process, so
@@ -884,6 +888,49 @@ export async function ignoreConflict(modA: string, modB: string): Promise<string
 
 export async function unignoreConflict(modA: string, modB: string): Promise<string[]> {
   return window.electronAPI.unignoreConflict(modA, modB);
+}
+
+export async function getIgnoredConflictFiles(): Promise<Record<string, string[]>> {
+  return window.electronAPI.getIgnoredConflictFiles();
+}
+
+export async function ignoreConflictFile(
+  ignoreKey: string,
+  filePath: string
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.ignoreConflictFile(ignoreKey, filePath);
+}
+
+// filePath === null clears the whole pair entry, not just one path.
+export async function unignoreConflictFile(
+  ignoreKey: string,
+  filePath: string | null
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.unignoreConflictFile(ignoreKey, filePath);
+}
+
+export async function getIgnoredConflictFilesGlobal(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictFilesGlobal();
+}
+
+export async function ignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictFileGlobal(filePath);
+}
+
+export async function unignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictFileGlobal(filePath);
+}
+
+export async function getIgnoredConflictMods(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictMods();
+}
+
+export async function ignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictMod(identity);
+}
+
+export async function unignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictMod(identity);
 }
 
 /** Build the ignored-list key for a pair of mod ids or stable identities.

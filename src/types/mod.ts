@@ -801,6 +801,10 @@ export interface ModConflict {
   ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
+  /** For `file` conflicts: every overlapping path still flagged for this pair
+   *  (after subtracting any individually ignored files). Drives the per-file
+   *  ignore UI. Undefined for `priority` conflicts. */
+  files?: string[];
 }
 
 /** The customizable launcher/sidebar art surfaces (issue: unify launcher
@@ -872,6 +876,22 @@ export interface AppSettings {
    *  pair is hidden without persisting it to ignoredConflicts, so toggling
    *  back off restores the original conflict view. */
   ignoreConflictsByDefault: boolean;
+  /** Per-pair ignored overlapping file paths. Keyed by the same stable
+   *  identity pair key as ignoredConflicts ("identityA::identityB" sorted);
+   *  the value lists individual paths the user dismissed. A file conflict is
+   *  only hidden entirely when every overlapping path lands here. Lets users
+   *  silence one shared file forever while still being warned about others. */
+  ignoredConflictFiles?: Record<string, string[]>;
+  /** Overlapping file paths the user has globally silenced: never counted as a
+   *  conflict for ANY mod pair (the user-curated companion to the built-in
+   *  compiler-artifact filter). For files that are never a real conflict no
+   *  matter which mods ship them, e.g. a shared build artifact. */
+  ignoredConflictFilesGlobal?: string[];
+  /** Stable mod identities (same scheme as the halves of an ignoredConflicts
+   *  pair key) the user has dismissed wholesale: any conflict involving the
+   *  mod, against any other mod, is suppressed. Right-click a mod in a
+   *  conflict -> "ignore this mod everywhere". */
+  ignoredConflictMods?: string[];
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
