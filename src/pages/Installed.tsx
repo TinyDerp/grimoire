@@ -82,12 +82,13 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
+import { Modal } from '../components/common/Modal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, IconButton, Tag } from '../components/common/ui';
+import { Button, CheckboxMark, IconButton, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
@@ -7388,22 +7389,37 @@ function ImportCustomModModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <FilePlus className="w-5 h-5" />
-            {title}
-          </h3>
-          <IconButton
-            icon={X}
-            label={t('common.actions.close')}
-            onClick={onClose}
-          />
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy="import-custom-mod-title"
+      size="lg"
+      dismissable={!submitting}
+      panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
+    >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <FilePlus className="h-5 w-5 text-accent" />
+            <h2 id="import-custom-mod-title" className="text-base font-semibold text-text-primary">
+              {title}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => !submitting && onClose()}
+            disabled={submitting}
+            aria-label={t('common.actions.close')}
+            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
+          <p className="text-xs leading-5 text-text-secondary">
+            {vpkHelpText}
+          </p>
+
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
               {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
@@ -7418,7 +7434,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
               onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 vpkDragActive
                   ? 'border-accent bg-accent/10'
                   : vpkPath
@@ -7448,9 +7464,6 @@ function ImportCustomModModal({
                 </>
               )}
             </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {vpkHelpText}
-            </p>
           </div>
 
           <FormField label={t('installed.import.modName')} required>
@@ -7475,7 +7488,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
               onDrop={handleImageDrop}
-              className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 imgDragActive
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
@@ -7507,13 +7520,14 @@ function ImportCustomModModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <label className="group flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer select-none">
             <input
               type="checkbox"
               checked={nsfw}
               onChange={(e) => setNsfw(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
+              className="peer sr-only"
             />
+            <CheckboxMark checked={nsfw} />
             {t('locker.soulImport.fields.nsfw')}
           </label>
 
@@ -7524,25 +7538,17 @@ function ImportCustomModModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            {t('common.actions.cancel')}
-          </Button>
+        <div className="flex justify-center border-t border-border px-5 py-3">
           <Button
             variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
             isLoading={submitting}
+            className="!px-10 !py-1.5"
           >
             {submitLabel}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }
