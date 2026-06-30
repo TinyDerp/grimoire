@@ -214,6 +214,12 @@ function shouldRestoreVpkEnabled(
   const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
   const index = getVpkIndex(mod);
   if (hasIndexedCandidates) {
+    // Snapshot carries no per-VPK index (the old install predates vpkIndex), but
+    // the redownload assigned indexes. We can't map which sibling was on, so
+    // honor the coarse "something was enabled" and restore every VPK, matching
+    // the pre-index behavior. Without this, a multi-VPK mod installed before
+    // vpkIndex existed silently lands fully disabled after an update.
+    if (snapshot.enabledIndexes.size === 0) return snapshot.enabledUnindexed;
     return index === undefined ? snapshot.enabledUnindexed : snapshot.enabledIndexes.has(index);
   }
   return snapshot.enabledIndexes.size === 0 && snapshot.enabledUnindexed;
@@ -2720,6 +2726,21 @@ export default function Installed() {
     [allEntries]
   );
 
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
+  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
+  // hit them for every entry on every render - including drag-start renders that
+  // only flip draggingKey. Caching them here (rebuilt only when allEntries
+  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // overlay without rescanning the whole library. Mirrors entryConflicts.
+  const entryFacetMeta = useMemo(() => {
+    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    for (const entry of allEntries) {
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+    }
+    return byKey;
+  }, [allEntries]);
+
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
   // cards only re-render when their own conflicts change.
@@ -2906,15 +2927,22 @@ export default function Installed() {
         progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
+  // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
+  // compute if an entry somehow isn't in the cache.
+  const heroNamesOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+  const tagKeysOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+
   // Hero and tag buckets are built from allEntries (not the filtered view) so
   // the option lists stay stable as selections change.
   const heroOptionMap = new Map<string, number>();
   const tagOptionMap = new Map<string, number>();
   for (const entry of allEntries) {
-    for (const heroName of entryHeroNames(entry)) {
+    for (const heroName of heroNamesOf(entry)) {
       heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
     }
-    for (const key of entryTagKeys(entry)) {
+    for (const key of tagKeysOf(entry)) {
       tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
     }
   }
@@ -2956,9 +2984,9 @@ export default function Installed() {
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
   const matchesHeroEntry = (entry: ModEntry) =>
-    heroFilter === 'all' || entryHeroNames(entry).includes(heroFilter);
+    heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
   const matchesTagEntry = (entry: ModEntry) =>
-    tagFilter.length === 0 || entryTagKeys(entry).some((key) => tagFilter.includes(key));
+    tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
   const matchesAllFilters = (entry: ModEntry) =>
     matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
