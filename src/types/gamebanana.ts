@@ -110,6 +110,7 @@ export interface GameBananaModDetails {
   category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
+  youtubeVideoIds?: string[];
   submitter?: GameBananaSubmitter;
 }
 

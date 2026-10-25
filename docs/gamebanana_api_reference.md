@@ -80,6 +80,18 @@ Retrieves full metadata for a specific mod. This is the **most reliable** source
 - `_sText`: Full HTML description.
 - `_bIsNsfw`: Definitive NSFW boolean.
 
+`_aEmbeddedMedia` is a separate array of video URLs, returned when included in
+`_csvProperties` for Mod and Wip submissions. Sound submissions reject this
+property, so Grimoire omits it from their requests. Grimoire extracts unique
+YouTube video IDs from this array and displays click-to-load players between
+the author and About sections.
+Other providers and malformed links are ignored. Thumbnails use YouTube's
+`i.ytimg.com/vi/{id}/hqdefault.jpg` URL, lazy-loaded through `RevealImage` with
+its existing failure handling. The player at `youtube-nocookie.com` only loads
+after clicking Play, and starting another video stops the previous player.
+The desktop player request includes the app ID as its HTTP referrer, as
+[required by YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality#api-client-identity-and-credentials).
+
 ---
 
 ## 2. Search API

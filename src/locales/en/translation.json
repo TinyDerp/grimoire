@@ -3171,9 +3171,15 @@
   "modDetails": {
     "sections": {
       "about": "About",
+      "videos": "Videos",
       "changelog": "Changelog",
       "files": "Files",
       "comments": "Comments"
+    },
+    "video": {
+      "title": "YouTube video {{number}}",
+      "play": "Play video",
+      "watchOnYouTube": "Watch on YouTube"
     },
     "status": {
       "installed": "Installed",

@@ -48,6 +48,7 @@ import { RevealImage } from './common/RevealImage';
 import { ArchivedTag, Button, CheckboxMark, IconButton, Tag } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import ImageContextMenu from './ImageContextMenu';
+import ModVideos from './ModVideos';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import { showToast } from '../stores/toastStore';
 import { selectFileDownloadActivity, useDownloadActivity } from '../lib/downloadActivity';
@@ -1679,6 +1680,8 @@ function ModDetailsModal({
                   </div>
                 </section>
               )}
+
+              <ModVideos key={`${section}:${mod.id}`} videoIds={mod.youtubeVideoIds} />
 
               {mod.description && (
                 <section>

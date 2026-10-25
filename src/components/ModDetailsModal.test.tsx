@@ -30,7 +30,7 @@ const mod: GameBananaModDetails = {
   files: [{ id: 30, fileName: 'new.zip', fileSize: 100, downloadCount: 1, downloadUrl: '', isArchived: false }],
 };
 
-describe('file replacement preferences', () => {
+describe('mod details', () => {
   let host: HTMLDivElement;
   let root: Root;
   let previousApi: typeof window.electronAPI;
@@ -170,5 +170,48 @@ describe('file replacement preferences', () => {
     await act(async () => replaceButton().click());
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it.each(['modal', 'sidebar'] as const)('loads videos on demand between the author and About in the %s', async variant => {
+    const videoMod: GameBananaModDetails = {
+      ...mod,
+      submitter: { id: 1, name: 'Test artist' },
+      description: 'About this mod',
+      youtubeVideoIds: ['qOwaOVo5lmw', 'AJKwHiwLp28'],
+    };
+    await render(false, { variant, mod: videoMod });
+    const videos = () => document.querySelector<HTMLElement>('section[aria-label="modDetails.sections.videos"]')!;
+    expect(videos().previousElementSibling?.textContent).toContain('Test artist');
+    expect(videos().nextElementSibling?.textContent).toContain('About this mod');
+    expect(document.querySelector('iframe')).toBeNull();
+    const play = () => videos().querySelector<HTMLButtonElement>('[aria-label="modDetails.video.play"]')!;
+    const watch = videos().querySelector<HTMLButtonElement>('[aria-label="modDetails.video.watchOnYouTube"]')!;
+    expect(play().textContent).toBe('');
+    expect(watch.textContent).toBe('');
+    expect(play().parentElement).toBe(watch.parentElement);
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    await act(async () => watch.click());
+    expect(open).toHaveBeenCalledExactlyOnceWith('https://www.youtube.com/watch?v=qOwaOVo5lmw', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
+    expect(document.querySelector('iframe')).toBeNull();
+    const thumbnails = videos().querySelectorAll('img');
+    expect(thumbnails).toHaveLength(2);
+    expect(thumbnails[0].src).toBe('https://i.ytimg.com/vi/qOwaOVo5lmw/hqdefault.jpg');
+    expect(thumbnails[0].getAttribute('loading')).toBe('lazy');
+    expect(thumbnails[0].getAttribute('referrerpolicy')).toBe('no-referrer');
+
+    await act(async () => play().click());
+    const player = videos().querySelector('iframe')!;
+    expect(player.src).toBe('https://www.youtube-nocookie.com/embed/qOwaOVo5lmw?autoplay=1');
+    expect(player.title).toBe('modDetails.video.title');
+    expect(videos().querySelectorAll('iframe')).toHaveLength(1);
+    await act(async () => play().click());
+    expect(videos().querySelectorAll('iframe')).toHaveLength(1);
+    expect(videos().querySelector('iframe')!.src).toContain('/embed/AJKwHiwLp28?');
+    expect(player.isConnected).toBe(false);
+    await render(false, { variant, mod: { ...videoMod, id: 11 } });
+    expect(document.querySelector('iframe')).toBeNull();
+    await render(false, { variant });
+    expect(videos()).toBeNull();
   });
 });

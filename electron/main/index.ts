@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, session, protocol, nativeTheme, screen } from 'electron';
 import { cleanupExpiredModBackups } from './services/modBackups';
 import { windowBackgroundColor } from '../../src/lib/oledMode';
+import { YOUTUBE_EMBED_ORIGIN, YOUTUBE_EMBED_REFERRER } from '../../src/lib/youtube';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { setDefaultAutoSelectFamilyAttemptTimeout } from 'net';
@@ -535,9 +536,22 @@ if (!gotTheLock) {
             optimizer.watchWindowShortcuts(window);
         });
 
+        // A file:// renderer has no HTTP referrer. Identify the app to YouTube
+        // only when loading its embedded player, as required for desktop apps.
+        session.defaultSession.webRequest.onBeforeSendHeaders(
+            { urls: [`${YOUTUBE_EMBED_ORIGIN}/embed/*`] },
+            (details, callback) => {
+                const requestHeaders = { ...details.requestHeaders };
+                if (details.resourceType === 'subFrame') requestHeaders.Referer = YOUTUBE_EMBED_REFERRER;
+                callback({ requestHeaders });
+            },
+        );
+
         // Set Content Security Policy (production only - Vite needs inline scripts for HMR in dev)
         if (!is.dev) {
-            session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+            // Apply the app policy to local resources, preserving YouTube's own
+            // response policy and script permissions inside its isolated frame.
+            session.defaultSession.webRequest.onHeadersReceived({ urls: ['file://*/*'] }, (details, callback) => {
                 callback({
                     responseHeaders: {
                         ...details.responseHeaders,
@@ -546,6 +560,7 @@ if (!gotTheLock) {
                             "script-src 'self'; " +
                             "style-src 'self' 'unsafe-inline'; " +
                             "font-src 'self'; " +
+                            `frame-src ${YOUTUBE_EMBED_ORIGIN}; ` +
                             // `grimoire-foundry:` serves Foundry's cached texture
                             // thumbnails, rendered as <img>, so they must be allowed
                             // here or the browse grid is blank under the prod CSP.

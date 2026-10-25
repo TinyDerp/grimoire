@@ -7,6 +7,7 @@ import { parseRequirements } from '../../../src/lib/modRequirements';
 import { cacheRequirements } from './modRequirementCache';
 import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 import { categoryIdFromProfileUrl } from '../../../src/lib/heroFilter';
+import { getYouTubeVideoIds } from '../../../src/lib/youtube';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
 // build; re-exported so the many `from './gamebanana'` importers keep working.
@@ -235,6 +236,7 @@ interface ModDetailsRaw {
     _bIsNsfw?: boolean;
     _aFiles?: FileRaw[];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
+    _aEmbeddedMedia?: string[] | null;
     _aCategory?: ModRaw['_aRootCategory'];
     _aSubmitter?: ModRaw['_aSubmitter'];
     _aGame?: CollectionItemRaw['_aGame'];
@@ -826,6 +828,8 @@ export async function fetchModDetails(
         '_aFiles',
         '_aPreviewMedia',
     ];
+    // Sound submissions do not expose this property; asking for it fails the request.
+    if (section !== 'Sound') fields.push('_aEmbeddedMedia');
     if (options.includeSubmitter) {
         fields.push('_aSubmitter');
     }
@@ -878,6 +882,7 @@ export async function fetchModDetails(
                     : undefined,
             }
         : undefined,
+        youtubeVideoIds: getYouTubeVideoIds(raw._aEmbeddedMedia),
         submitter: mapSubmitter(raw._aSubmitter),
     };
 }

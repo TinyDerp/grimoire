@@ -9,8 +9,9 @@ vi.mock('./modDatabase', () => ({
     getCachedCategoryTree: vi.fn(),
     saveCachedCategoryTree: vi.fn(),
 }));
+vi.mock('./modRequirementCache', () => ({ cacheRequirements: vi.fn() }));
 
-import { fetchSubmissions } from './gamebanana';
+import { fetchModDetails, fetchSubmissions } from './gamebanana';
 
 // Trimmed from the live Mod/Index list response on 2026-10-16. The list
 // endpoint gives both categories as name + profile URL and no _idRow, and sends
@@ -64,5 +65,34 @@ describe('fetchSubmissions sub-category', () => {
         expect(records[0].rootCategory?.name).toBe('Skins');
         expect(records[0].subCategory).toMatchObject({ id: 42674, name: 'Graves' });
         expect(records[1].subCategory).toBeUndefined();
+    });
+});
+
+describe('GameBanana embedded videos', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('loads YouTube media through the existing details request', async () => {
+        const fetch = vi.fn(async () => Response.json({
+            _idRow: 726099,
+            _aEmbeddedMedia: [
+                'https://www.youtube.com/watch?v=qOwaOVo5lmw',
+                'https://www.youtube.com/watch?v=AJKwHiwLp28&t=3s',
+                'https://youtu.be/qOwaOVo5lmw',
+                'https://example.com/not-a-video',
+            ],
+        }));
+        vi.stubGlobal('fetch', fetch);
+        expect((await fetchModDetails(726099)).youtubeVideoIds).toEqual(['qOwaOVo5lmw', 'AJKwHiwLp28']);
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(String((fetch.mock.calls[0] as unknown[])[0])).toContain('_aEmbeddedMedia');
+    });
+
+    it.each(['Sound', 'Wip'])('handles absent videos in %s submissions without unsupported fields', async section => {
+        const fetch = vi.fn(async () => Response.json({ _idRow: 1, _aEmbeddedMedia: null }));
+        vi.stubGlobal('fetch', fetch);
+        expect((await fetchModDetails(1, section)).youtubeVideoIds).toEqual([]);
+        const url = String((fetch.mock.calls[0] as unknown[])[0]);
+        expect(url.includes('_aEmbeddedMedia')).toBe(section !== 'Sound');
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 });

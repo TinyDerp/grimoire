@@ -433,7 +433,7 @@ export function Button({
 // ============================================================================
 
 interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
-    icon: LucideIcon;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
     /** Accessible name + hover tooltip (icon-only, so this is mandatory). */
     label: string;
     size?: 'sm' | 'md';
